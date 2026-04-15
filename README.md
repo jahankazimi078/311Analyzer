@@ -189,6 +189,18 @@ They now import the renamed modules (`geo`, `operations`, `fairness`, `predictiv
 ./.venv/bin/streamlit run 311dashboard.py
 ```
 
+### Build the deployable dashboard bundle
+
+For Streamlit Cloud, the app now supports a committed lightweight artifact bundle under `data/deploy/`.
+
+Rebuild it from your full local analytics with:
+
+```bash
+./.venv/bin/python data/build_deploy_artifacts.py
+```
+
+The dashboard loader prefers the full local files under `data/analytics/` and `data/reference/`, but if those are missing it automatically falls back to the reduced deployment bundle.
+
 ## Repo Conventions
 
 - large local data artifacts are intentionally ignored by git
@@ -208,3 +220,7 @@ Before publishing, make sure you do **not** commit:
 - local model or dashboard cache artifacts
 
 Those are all treated as local build products rather than source code.
+
+Exception:
+
+- `data/deploy/` is intended to be committed because it contains the reduced dashboard-only artifacts used for Streamlit Cloud deployment.

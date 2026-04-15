@@ -6,6 +6,7 @@ from typing import Any
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
 from geo import NYC_LAT_RANGE, NYC_LON_RANGE, summarize_hotspot_grids
 
@@ -31,6 +32,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 ANALYTIC_PATH = PROJECT_ROOT / "data" / "analytics" / "requests_2025_2026_analytic.parquet"
 NLP_PATH = PROJECT_ROOT / "data" / "analytics" / "requests_2025_2026_issue_subtypes.parquet"
 ANALYTICS_DIR = PROJECT_ROOT / "data" / "analytics"
+DEPLOY_ROOT = PROJECT_ROOT / "data" / "deploy"
+DEPLOY_ANALYTICS_DIR = DEPLOY_ROOT / "analytics"
+DEPLOY_REFERENCE_DIR = DEPLOY_ROOT / "reference"
+
+DEPLOY_ANALYTIC_CORE_PATH = DEPLOY_ANALYTICS_DIR / "requests_2025_2026_analytic_dashboard_core.parquet"
+DEPLOY_ANALYTIC_GEO_PATH = DEPLOY_ANALYTICS_DIR / "requests_2025_2026_analytic_dashboard_geo.parquet"
+DEPLOY_NLP_PATH = DEPLOY_ANALYTICS_DIR / "requests_2025_2026_issue_subtypes_dashboard.parquet"
 
 OPERATIONS_MONTHLY_PATH = ANALYTICS_DIR / "requests_2025_2026_operations_monthly.parquet"
 AGENCY_METRICS_PATH = ANALYTICS_DIR / "requests_2025_2026_agency_metrics.parquet"
@@ -115,14 +123,105 @@ def _ensure_exists(path: Path) -> Path:
     return path
 
 
+def resolve_dashboard_input(path: Path) -> Path:
+    if path.exists():
+        return path
+
+    try:
+        relative_path = path.relative_to(PROJECT_ROOT / "data")
+    except ValueError:
+        return _ensure_exists(path)
+
+    deploy_path = DEPLOY_ROOT / relative_path
+    if deploy_path.exists():
+        return deploy_path
+    return _ensure_exists(path)
+
+
+def _missing_columns_message(label: str, requested: list[str], available: set[str]) -> str:
+    missing = sorted(set(requested) - available)
+    return f"{label} is missing required columns: {', '.join(missing)}"
+
+
+def _read_parquet_columns(path: Path, columns: list[str]) -> pd.DataFrame:
+    return pd.read_parquet(_ensure_exists(path), columns=columns)
+
+
+def _parquet_columns(path: Path) -> set[str]:
+    return set(pq.read_schema(_ensure_exists(path)).names)
+
+
+@st.cache_data(show_spinner=False)
+def read_analytic_columns(columns: list[str]) -> pd.DataFrame:
+    if ANALYTIC_PATH.exists():
+        return _read_parquet_columns(ANALYTIC_PATH, columns)
+
+    deploy_sources = [
+        ("deployment analytic core parquet", DEPLOY_ANALYTIC_CORE_PATH),
+        ("deployment analytic geo parquet", DEPLOY_ANALYTIC_GEO_PATH),
+    ]
+    source_columns_by_path: list[tuple[Path, set[str]]] = []
+    available_columns: set[str] = set()
+    frames: list[pd.DataFrame] = []
+    remaining = list(dict.fromkeys(columns))
+
+    for _, path in deploy_sources:
+        if not path.exists():
+            continue
+        source_columns = _parquet_columns(path)
+        source_columns_by_path.append((path, source_columns))
+        available_columns.update(source_columns)
+        if set(remaining).issubset(source_columns):
+            return _read_parquet_columns(path, remaining)
+
+    for path, source_columns in source_columns_by_path:
+        selected = [column for column in remaining if column in source_columns]
+        if not selected:
+            continue
+        frame = _read_parquet_columns(path, selected)
+        if "unique_key" in frame.columns:
+            frame = frame.drop_duplicates(subset="unique_key", keep="first")
+        frames.append(frame)
+        remaining = [column for column in remaining if column not in selected]
+
+    if remaining:
+        raise FileNotFoundError(_missing_columns_message("Deployment analytic artifacts", columns, available_columns))
+    if len(frames) == 1:
+        return frames[0]
+
+    merged = frames[0]
+    for frame in frames[1:]:
+        if "unique_key" not in merged.columns or "unique_key" not in frame.columns:
+            raise ValueError(
+                "Requested analytic columns span multiple deployment artifacts that cannot be joined safely."
+            )
+        merged = merged.merge(frame, on="unique_key", how="inner", validate="one_to_one")
+    return merged.loc[:, columns]
+
+
+@st.cache_data(show_spinner=False)
+def read_nlp_columns(columns: list[str]) -> pd.DataFrame:
+    if NLP_PATH.exists():
+        return _read_parquet_columns(NLP_PATH, columns)
+
+    if not DEPLOY_NLP_PATH.exists():
+        raise FileNotFoundError(f"Missing required dashboard input: {NLP_PATH}")
+
+    available_columns = _parquet_columns(DEPLOY_NLP_PATH)
+    missing = [column for column in columns if column not in available_columns]
+    if missing:
+        raise FileNotFoundError(_missing_columns_message("Deployment NLP artifact", columns, available_columns))
+    return _read_parquet_columns(DEPLOY_NLP_PATH, columns)
+
+
 @st.cache_data(show_spinner=False)
 def load_table(path: str) -> pd.DataFrame:
-    return pd.read_parquet(_ensure_exists(Path(path)))
+    return pd.read_parquet(resolve_dashboard_input(Path(path)))
 
 
 @st.cache_data(show_spinner=False)
 def load_geo_table(path: str) -> gpd.GeoDataFrame:
-    return gpd.read_parquet(_ensure_exists(Path(path)))
+    return gpd.read_parquet(resolve_dashboard_input(Path(path)))
 
 
 def format_int(value: Any) -> str:
@@ -350,7 +449,7 @@ def build_eda_summary() -> dict[str, Any]:
         "resolution_days",
         "resolution_bucket",
     ]
-    df = pd.read_parquet(_ensure_exists(ANALYTIC_PATH), columns=columns)
+    df = read_analytic_columns(columns)
     df["created_date"] = pd.to_datetime(df["created_date"], errors="coerce")
     df["created_month_start"] = pd.to_datetime(df["created_month_start"], errors="coerce")
     df["year_label"] = df["created_year"].map({2025: "2025", 2026: "2026 YTD"}).fillna(df["created_year"].astype("string"))
@@ -476,7 +575,7 @@ def build_nlp_summary() -> dict[str, Any]:
         "agency",
         "borough",
     ]
-    df = pd.read_parquet(_ensure_exists(NLP_PATH), columns=columns)
+    df = read_nlp_columns(columns)
 
     overall = {
         "complaints": len(df.index),
@@ -579,10 +678,7 @@ def build_nlp_summary() -> dict[str, Any]:
 
 @st.cache_data(show_spinner=False)
 def build_geo_summary() -> dict[str, Any]:
-    analytic = pd.read_parquet(
-        _ensure_exists(ANALYTIC_PATH),
-        columns=["unique_key", "latitude", "longitude", "borough", "complaint_type"],
-    )
+    analytic = read_analytic_columns(["unique_key", "latitude", "longitude", "borough", "complaint_type"])
     analytic["valid_coordinate_flag"] = (
         analytic["latitude"].notna()
         & analytic["longitude"].notna()
@@ -619,10 +715,7 @@ def build_geo_summary() -> dict[str, Any]:
     hotspot_monthly["hotspot_complaint_share"] = hotspot_monthly["hotspot_complaints"] / hotspot_monthly["total_complaints"]
     hotspot_monthly = add_month_label(hotspot_monthly)
 
-    subtypes = pd.read_parquet(
-        _ensure_exists(NLP_PATH),
-        columns=["unique_key", "issue_subtype", "subtype_modeled_flag"],
-    )
+    subtypes = read_nlp_columns(["unique_key", "issue_subtype", "subtype_modeled_flag"])
     hotspot_frame = analytic.merge(subtypes, on="unique_key", how="left", validate="one_to_one")
     complaint_hotspots = summarize_hotspot_grids(hotspot_frame, "complaint_type", top_n_categories=6, top_n_grids=3)
     modeled_only = hotspot_frame.loc[
