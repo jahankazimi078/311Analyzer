@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
+from urllib.request import urlopen
 
 import geopandas as gpd
 import numpy as np
@@ -35,6 +38,10 @@ ANALYTICS_DIR = PROJECT_ROOT / "data" / "analytics"
 DEPLOY_ROOT = PROJECT_ROOT / "data" / "deploy"
 DEPLOY_ANALYTICS_DIR = DEPLOY_ROOT / "analytics"
 DEPLOY_REFERENCE_DIR = DEPLOY_ROOT / "reference"
+DEPLOY_DATA_BASE_URL = os.environ.get(
+    "STREAMLIT_DEPLOY_DATA_BASE_URL",
+    "https://raw.githubusercontent.com/jahankazimi078/311Analyzer/main/data/deploy",
+).rstrip("/")
 
 DEPLOY_ANALYTIC_CORE_PATH = DEPLOY_ANALYTICS_DIR / "requests_2025_2026_analytic_dashboard_core.parquet"
 DEPLOY_ANALYTIC_GEO_PATH = DEPLOY_ANALYTICS_DIR / "requests_2025_2026_analytic_dashboard_geo.parquet"
@@ -123,6 +130,27 @@ def _ensure_exists(path: Path) -> Path:
     return path
 
 
+def _download_deploy_file(path: Path) -> Path | None:
+    try:
+        relative_path = path.relative_to(DEPLOY_ROOT)
+    except ValueError:
+        return None
+
+    url = f"{DEPLOY_DATA_BASE_URL}/{relative_path.as_posix()}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with urlopen(url) as response:
+            if getattr(response, "status", 200) != 200:
+                return None
+            path.write_bytes(response.read())
+    except URLError:
+        return None
+
+    if path.exists():
+        return path
+    return None
+
+
 def resolve_dashboard_input(path: Path) -> Path:
     if path.exists():
         return path
@@ -135,6 +163,9 @@ def resolve_dashboard_input(path: Path) -> Path:
     deploy_path = DEPLOY_ROOT / relative_path
     if deploy_path.exists():
         return deploy_path
+    downloaded = _download_deploy_file(deploy_path)
+    if downloaded is not None:
+        return downloaded
     return _ensure_exists(path)
 
 
@@ -850,22 +881,38 @@ def render_overview_page() -> None:
     operations = build_operations_summary()
     geo = load_geo_table(str(ZCTA_METRICS_PATH))
     grid_persistence = load_geo_table(str(GRID_PERSISTENCE_PATH))
-    fairness = build_fairness_summary()
-    predictive = build_predictive_summary()
-    eda = build_eda_summary()
-    nlp = build_nlp_summary()
+    fairness_metrics = load_table(str(ZCTA_FAIRNESS_METRICS_PATH)).copy()
+    model_metrics = load_table(str(RESOLUTION_MODEL_METRICS_PATH)).copy()
+    community_board_metrics = load_table(str(COMMUNITY_BOARD_METRICS_PATH)).copy()
 
     render_page_intro(
         "Overview",
         "A polished executive view of city demand, issue taxonomy, neighborhood burden, service performance, equity signals, and resolution-time forecasting.",
     )
 
-    total_complaints = eda["quality"]["complaints"]
-    top_complaint_type = eda["top_complaint_types"].iloc[0]
+    complaint_type_metrics = operations["complaint_type_metrics"]
+    agency_metrics = operations["agency_metrics"]
+    total_complaints = int(complaint_type_metrics["complaints"].sum())
+    top_complaint_type = complaint_type_metrics.sort_values("complaints", ascending=False).iloc[0]
     top_burden_zcta = geo.sort_values("complaints_per_10k", ascending=False).iloc[0]
     top_hotspot = grid_persistence.sort_values("hotspot_month_share", ascending=False).iloc[0]
+    top_board = community_board_metrics.sort_values("complaints", ascending=False).iloc[0]
+    income_quintiles = (
+        fairness_metrics.loc[fairness_metrics["income_quintile"].notna()]
+        .groupby("income_quintile", observed=True)["median_resolution_days"]
+        .median()
+        .sort_index()
+    )
+    subtype_leaders = (
+        community_board_metrics.loc[community_board_metrics["top_issue_subtype"].notna()]
+        .loc[community_board_metrics["top_issue_subtype"].astype("string").ne("not_modeled")]
+        ["top_issue_subtype"]
+        .astype("string")
+        .value_counts()
+        .head(10)
+    )
     best_macro = (
-        predictive["overall_metrics"].loc[predictive["overall_metrics"]["metric"].eq("macro_f1")]
+        model_metrics.loc[model_metrics["metric_scope"].eq("overall") & model_metrics["metric"].eq("macro_f1")]
         .sort_values("metric_value", ascending=False)
         .iloc[0]
     )
@@ -883,7 +930,7 @@ def render_overview_page() -> None:
     findings_box(
         [
             f"Complaint demand is concentrated in a few very high-volume categories led by {top_complaint_type['complaint_type']}.",
-            f"The dashboard brings the full project together in one interface, from exploratory analysis through forecasting.",
+            f"{top_board['community_board']} is the highest-volume community board in the current outputs.",
             "2026 remains labeled as YTD in trend and forecasting views so partial-year movement is not overstated.",
             "Fairness pages keep the repo's interpretation guardrails: area-level disparities are signals for follow-up, not causal proof.",
         ]
@@ -899,7 +946,7 @@ def render_overview_page() -> None:
             "The citywide demand picture is dominated by a small number of recurring complaint families, with strong concentration by borough and by time of day."
         )
         series_bar_chart(
-            eda["top_complaint_types"].head(10).set_index("complaint_type")["complaints"],
+            complaint_type_metrics.head(10).set_index("complaint_type")["complaints"],
             title="Largest complaint categories",
         )
         cols = st.columns(2)
@@ -907,19 +954,19 @@ def render_overview_page() -> None:
             f"`{top_complaint_type['complaint_type']}` is the largest category in scope with {format_int(top_complaint_type['complaints'])} complaints."
         )
         cols[1].markdown(
-            f"{eda['borough_counts'].iloc[0]['borough']} contributes the highest raw complaint volume across the city."
+            f"{agency_metrics.sort_values('complaints', ascending=False).iloc[0]['agency']} handles the highest complaint volume across agencies."
         )
     with phase_tabs[1]:
         st.markdown(
             "The text layer turns broad complaint categories into more actionable issue subtypes and closure-language patterns that can be carried into later phases."
         )
-        series_bar_chart(
-            nlp["modeled_subtypes"].head(10).set_index("issue_subtype")["complaints"],
-            title="Largest modeled issue subtypes",
-        )
-        st.markdown(
-            f"Subtype assignment covers {format_pct(nlp['overall']['modeled_share'], 1)} of complaints, led by `{nlp['modeled_subtypes'].iloc[0]['issue_subtype']}`."
-        )
+        if subtype_leaders.empty:
+            st.info("Modeled subtype leader summaries are unavailable in the current artifact.")
+        else:
+            series_bar_chart(subtype_leaders, title="Most common community-board subtype leaders")
+            st.markdown(
+                f"`{subtype_leaders.index[0]}` is the most common top issue subtype across community boards in the current outputs."
+            )
     with phase_tabs[2]:
         st.markdown(
             "The geography layer distinguishes simple raw volume from resident-normalized burden and recurring hotspot persistence."
@@ -956,21 +1003,17 @@ def render_overview_page() -> None:
         st.markdown(
             "Neighborhood equity views show where burden and outcome gaps are visible, and where those gaps remain after comparing like-with-like issue and agency slices."
         )
-        income_quintiles = (
-            fairness["fairness_metrics"].loc[fairness["fairness_metrics"]["income_quintile"].notna()]
-            .groupby("income_quintile", observed=True)["median_resolution_days"]
-            .median()
-            .sort_index()
-        )
         series_bar_chart(income_quintiles, title="Median resolution time by income quintile")
         st.markdown(
-            f"The highest resident-normalized reported burden in the fairness layer appears in ZCTA `{fairness['fairness_metrics'].sort_values('complaints_per_10k', ascending=False).iloc[0]['zcta']}`."
+            f"The highest resident-normalized reported burden in the fairness layer appears in ZCTA `{fairness_metrics.sort_values('complaints_per_10k', ascending=False).iloc[0]['zcta']}`."
         )
     with phase_tabs[5]:
         st.markdown(
             "The forecasting layer compares a baseline, an interpretable multinomial logistic model, and a stronger tree benchmark across both post-routing and intake-only feature sets."
         )
-        score_pivot = predictive["overall_metrics"].loc[predictive["overall_metrics"]["metric"].eq("macro_f1")].pivot(
+        score_pivot = model_metrics.loc[
+            model_metrics["metric_scope"].eq("overall") & model_metrics["metric"].eq("macro_f1")
+        ].pivot(
             index="model_name",
             columns="feature_set",
             values="metric_value",
