@@ -1,4 +1,13 @@
 streamlit>=1.56,<2
-geopandas>=1.1
-pyarrow>=23
 watchdog>=6
+pydeck>=0.9
+
+pandas>=2.2
+numpy>=2.0
+pyarrow>=23
+
+geopandas>=1.1
+shapely>=2.0
+requests>=2.32
+
+scikit-learn>=1.5
