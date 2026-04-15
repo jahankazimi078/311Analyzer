@@ -4,13 +4,16 @@
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.coverage
+.streamlit/
+*.log
 
 # Ignore large local data artifacts, but keep lightweight docs and build scripts.
 data/*
 !data/README.md
 !data/*.py
+models/
 
-# Ignore agent scratch files, but keep the project spec and repo instructions.
-ag/*
-!ag/project_spec.md
-!ag/AGENTS.md
+ag/

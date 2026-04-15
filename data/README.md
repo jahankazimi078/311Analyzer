@@ -15,7 +15,15 @@ Build or rebuild it with:
 ```bash
 ./.venv/bin/python data/build_sqlite.py
 ./.venv/bin/python data/build_parquet.py
+./.venv/bin/python data/build_reference_geo.py
 ```
+
+`build_reference_geo.py` downloads two lightweight external sources for Phase 5 geospatial analysis:
+
+- Census TIGER/Line ZCTA boundaries
+- ACS total population by ZCTA
+
+Those local outputs are written under `data/reference/` and are used by `Geo.ipynb`.
 
 Quick example:
 
