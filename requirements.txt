@@ -5,6 +5,7 @@ pydeck>=0.9
 pandas>=2.2
 numpy>=2.0
 pyarrow>=23
+matplotlib>=3.9
 
 geopandas>=1.1
 shapely>=2.0
