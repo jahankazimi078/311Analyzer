@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
 
 import pandas as pd
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from dashboard_artifacts import (
+    DASHBOARD_SUMMARY_FILENAMES,
+    build_dashboard_summary_artifacts,
+)
+
+
 ANALYTICS_DIR = PROJECT_ROOT / "data" / "analytics"
 REFERENCE_DIR = PROJECT_ROOT / "data" / "reference"
 DEPLOY_ANALYTICS_DIR = PROJECT_ROOT / "data" / "deploy" / "analytics"
@@ -15,9 +24,15 @@ DEPLOY_REFERENCE_DIR = PROJECT_ROOT / "data" / "deploy" / "reference"
 ANALYTIC_SOURCE = ANALYTICS_DIR / "requests_2025_2026_analytic.parquet"
 NLP_SOURCE = ANALYTICS_DIR / "requests_2025_2026_issue_subtypes.parquet"
 
-DEPLOY_ANALYTIC_CORE = DEPLOY_ANALYTICS_DIR / "requests_2025_2026_analytic_dashboard_core.parquet"
-DEPLOY_ANALYTIC_GEO = DEPLOY_ANALYTICS_DIR / "requests_2025_2026_analytic_dashboard_geo.parquet"
-DEPLOY_NLP = DEPLOY_ANALYTICS_DIR / "requests_2025_2026_issue_subtypes_dashboard.parquet"
+DEPLOY_ANALYTIC_CORE = (
+    DEPLOY_ANALYTICS_DIR / "requests_2025_2026_analytic_dashboard_core.parquet"
+)
+DEPLOY_ANALYTIC_GEO = (
+    DEPLOY_ANALYTICS_DIR / "requests_2025_2026_analytic_dashboard_geo.parquet"
+)
+DEPLOY_NLP = (
+    DEPLOY_ANALYTICS_DIR / "requests_2025_2026_issue_subtypes_dashboard.parquet"
+)
 
 ANALYTIC_CORE_COLUMNS = [
     "created_date",
@@ -123,11 +138,23 @@ def build_deploy_artifacts() -> None:
         ]
     )
 
+    generated_summary_paths = build_dashboard_summary_artifacts(
+        ANALYTIC_SOURCE,
+        NLP_SOURCE,
+        ANALYTICS_DIR,
+    )
+    for path in generated_summary_paths:
+        size_mb = path.stat().st_size / (1024 * 1024)
+        print(f"Built {path.relative_to(PROJECT_ROOT)} ({size_mb:.2f} MB)")
+
     write_projection(ANALYTIC_SOURCE, ANALYTIC_CORE_COLUMNS, DEPLOY_ANALYTIC_CORE)
     write_projection(ANALYTIC_SOURCE, ANALYTIC_GEO_COLUMNS, DEPLOY_ANALYTIC_GEO)
     write_projection(NLP_SOURCE, NLP_COLUMNS, DEPLOY_NLP)
 
     for name in STATIC_ANALYTIC_FILES:
+        copy_file(ANALYTICS_DIR / name, DEPLOY_ANALYTICS_DIR / name)
+
+    for name in DASHBOARD_SUMMARY_FILENAMES:
         copy_file(ANALYTICS_DIR / name, DEPLOY_ANALYTICS_DIR / name)
 
     for name in STATIC_REFERENCE_FILES:

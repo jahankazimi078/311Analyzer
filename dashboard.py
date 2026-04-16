@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
+from dashboard_artifacts import eda_summary_paths, geo_summary_paths, nlp_summary_paths
 from geo import NYC_LAT_RANGE, NYC_LON_RANGE, summarize_hotspot_grids
 
 
@@ -111,6 +112,9 @@ RESOLUTION_ERROR_SLICES_PATH = (
 RESOLUTION_FEATURE_IMPORTANCE_PATH = (
     ANALYTICS_DIR / "requests_2025_2026_resolution_bucket_feature_importance.parquet"
 )
+EDA_SUMMARY_PATHS = eda_summary_paths(ANALYTICS_DIR)
+NLP_SUMMARY_PATHS = nlp_summary_paths(ANALYTICS_DIR)
+GEO_SUMMARY_PATHS = geo_summary_paths(ANALYTICS_DIR)
 
 PAGE_OPTIONS = [
     "Overview",
@@ -569,157 +573,22 @@ def format_metric_for_map(metric_column: str, series: pd.Series) -> pd.Series:
 
 @st.cache_data(show_spinner=False)
 def build_eda_summary() -> dict[str, Any]:
-    columns = [
-        "created_date",
-        "created_year",
-        "created_month_start",
-        "created_hour",
-        "created_weekday",
-        "created_season",
-        "borough",
-        "agency",
-        "complaint_type",
-        "descriptor",
-        "status",
-        "is_closed_status",
-        "closed_status_missing_date_flag",
-        "nonclosed_status_has_date_flag",
-        "negative_resolution_flag",
-        "resolved_with_valid_date",
-        "resolution_days",
-        "resolution_bucket",
-    ]
-    df = read_analytic_columns(columns)
-    df["created_date"] = pd.to_datetime(df["created_date"], errors="coerce")
-    df["created_month_start"] = pd.to_datetime(
-        df["created_month_start"], errors="coerce"
-    )
-    df["year_label"] = (
-        df["created_year"]
-        .map({2025: "2025", 2026: "2026 YTD"})
-        .fillna(df["created_year"].astype("string"))
-    )
-
-    quality = {
-        "complaints": len(df.index),
-        "resolved_with_valid_date": int(df["resolved_with_valid_date"].sum()),
-        "resolved_with_valid_date_share": float(df["resolved_with_valid_date"].mean()),
-        "closed_status_missing_date_count": int(
-            df["closed_status_missing_date_flag"].sum()
-        ),
-        "nonclosed_status_has_date_count": int(
-            df["nonclosed_status_has_date_flag"].sum()
-        ),
-        "negative_resolution_count": int(df["negative_resolution_flag"].sum()),
-        "median_resolution_days": float(
-            df.loc[df["resolved_with_valid_date"], "resolution_days"].median()
-        ),
-        "max_created_date": df["created_date"].max(),
-    }
-
-    monthly = (
-        df.groupby(["created_month_start", "year_label"], observed=True)
-        .size()
-        .reset_index(name="complaints")
-        .sort_values("created_month_start")
-    )
-    monthly = add_month_label(monthly)
-
-    top_complaint_types = (
-        df["complaint_type"]
-        .astype("string")
-        .value_counts()
-        .head(12)
-        .rename_axis("complaint_type")
-        .reset_index(name="complaints")
-    )
-    top_type_values = top_complaint_types["complaint_type"].tolist()
-    monthly_by_type = (
-        df.loc[df["complaint_type"].astype("string").isin(top_type_values)]
-        .groupby(["created_month_start", "complaint_type"], observed=True)
-        .size()
-        .reset_index(name="complaints")
-        .sort_values("created_month_start")
-    )
-    monthly_by_type = add_month_label(monthly_by_type)
-
-    seasonal = (
-        df.groupby(["created_season", "year_label"], observed=True)
-        .size()
-        .reset_index(name="complaints")
-    )
-    seasonal["created_season"] = pd.Categorical(
-        seasonal["created_season"], categories=SEASON_ORDER, ordered=True
-    )
-    seasonal = seasonal.sort_values(["created_season", "year_label"]).reset_index(
-        drop=True
-    )
-
-    hourly = (
-        df.groupby("created_hour", observed=True)
-        .size()
-        .reset_index(name="complaints")
-        .sort_values("created_hour")
-    )
-
-    weekday_hour = (
-        df.groupby(["created_weekday", "created_hour"], observed=True)
-        .size()
-        .reset_index(name="complaints")
-    )
-    weekday_hour["created_weekday"] = pd.Categorical(
-        weekday_hour["created_weekday"].astype("string"),
-        categories=WEEKDAY_ORDER,
-        ordered=True,
-    )
-    weekday_hour = weekday_hour.sort_values(
-        ["created_weekday", "created_hour"]
-    ).reset_index(drop=True)
-
-    borough_counts = (
-        df.groupby("borough", observed=True)
-        .size()
-        .reset_index(name="complaints")
-        .sort_values("complaints", ascending=False)
-    )
-
-    borough_mix = (
-        df.loc[df["complaint_type"].astype("string").isin(top_type_values[:8])]
-        .groupby(["borough", "complaint_type"], observed=True)
-        .size()
-        .reset_index(name="complaints")
-        .sort_values(["borough", "complaints"], ascending=[True, False])
-    )
-
-    resolution_bucket_counts = (
-        df["resolution_bucket"]
-        .astype("string")
-        .fillna("Missing")
-        .replace({"<NA>": "Missing"})
-        .value_counts()
-        .reindex(RESOLUTION_BUCKET_ORDER)
-        .fillna(0)
-        .rename_axis("resolution_bucket")
-        .reset_index(name="complaints")
-    )
-
-    descriptor_counts = (
-        df["descriptor"]
-        .astype("string")
-        .fillna("Unknown")
-        .value_counts()
-        .head(15)
-        .rename_axis("descriptor")
-        .reset_index(name="complaints")
-    )
-
-    sample_rows = (
-        df.loc[:, ["created_date", "borough", "complaint_type", "descriptor", "status"]]
-        .dropna(subset=["created_date"])
-        .sample(min(15, len(df.index)), random_state=42)
-        .sort_values("created_date")
-        .reset_index(drop=True)
-    )
+    quality = load_table(str(EDA_SUMMARY_PATHS["quality"])).iloc[0].to_dict()
+    monthly = load_table(str(EDA_SUMMARY_PATHS["monthly"])).copy()
+    monthly_by_type = load_table(str(EDA_SUMMARY_PATHS["monthly_by_type"])).copy()
+    top_complaint_types = load_table(
+        str(EDA_SUMMARY_PATHS["top_complaint_types"])
+    ).copy()
+    seasonal = load_table(str(EDA_SUMMARY_PATHS["seasonal"])).copy()
+    hourly = load_table(str(EDA_SUMMARY_PATHS["hourly"])).copy()
+    weekday_hour = load_table(str(EDA_SUMMARY_PATHS["weekday_hour"])).copy()
+    borough_counts = load_table(str(EDA_SUMMARY_PATHS["borough_counts"])).copy()
+    borough_mix = load_table(str(EDA_SUMMARY_PATHS["borough_mix"])).copy()
+    resolution_bucket_counts = load_table(
+        str(EDA_SUMMARY_PATHS["resolution_bucket_counts"])
+    ).copy()
+    descriptor_counts = load_table(str(EDA_SUMMARY_PATHS["descriptor_counts"])).copy()
+    sample_rows = load_table(str(EDA_SUMMARY_PATHS["sample_rows"])).copy()
 
     return {
         "quality": quality,
@@ -739,147 +608,29 @@ def build_eda_summary() -> dict[str, Any]:
 
 @st.cache_data(show_spinner=False)
 def build_nlp_summary() -> dict[str, Any]:
-    columns = [
-        "complaint_type",
-        "issue_family",
-        "issue_subtype",
-        "subtype_modeled_flag",
-        "potential_label_mismatch_flag",
-        "residual_cluster_label",
-        "resolution_outcome_group",
-        "resolution_outcome_confidence",
-        "subtype_source",
-        "issue_subtype_confidence",
-        "agency",
-        "borough",
-    ]
-    df = read_nlp_columns(columns)
-
-    overall = {
-        "complaints": len(df.index),
-        "modeled_share": float(df["subtype_modeled_flag"].mean()),
-        "mismatch_share": float(df["potential_label_mismatch_flag"].mean()),
-        "resolution_text_share": float(
-            df["resolution_outcome_group"]
-            .astype("string")
-            .ne("no_resolution_text")
-            .mean()
-        ),
-        "high_confidence_subtype_share": float(
-            df["issue_subtype_confidence"].astype("string").eq("high").mean()
-        ),
-    }
-
-    issue_families = (
-        df["issue_family"]
-        .astype("string")
-        .value_counts()
-        .head(15)
-        .rename_axis("issue_family")
-        .reset_index(name="complaints")
-    )
-    modeled_subtypes = (
-        df.loc[df["subtype_modeled_flag"], "issue_subtype"]
-        .astype("string")
-        .value_counts()
-        .head(15)
-        .rename_axis("issue_subtype")
-        .reset_index(name="complaints")
-    )
-    subtype_source = (
-        df["subtype_source"]
-        .astype("string")
-        .value_counts()
-        .rename_axis("subtype_source")
-        .reset_index(name="complaints")
-    )
-    outcome_groups = (
-        df["resolution_outcome_group"]
-        .astype("string")
-        .value_counts()
-        .rename_axis("resolution_outcome_group")
-        .reset_index(name="complaints")
-    )
-    outcome_confidence = (
-        df["resolution_outcome_confidence"]
-        .astype("string")
-        .value_counts()
-        .rename_axis("resolution_outcome_confidence")
-        .reset_index(name="complaints")
-    )
-
-    complaint_type_coverage = (
-        df.groupby("complaint_type", observed=True)
-        .agg(
-            complaints=("issue_family", "size"),
-            subtype_modeled_share=("subtype_modeled_flag", "mean"),
-            mismatch_share=("potential_label_mismatch_flag", "mean"),
-            top_issue_family=("issue_family", first_mode),
-        )
-        .reset_index()
-        .sort_values("complaints", ascending=False)
-    )
-    top_modeled_by_type = (
-        df.loc[df["subtype_modeled_flag"]]
-        .groupby("complaint_type", observed=True)["issue_subtype"]
-        .agg(top_issue_subtype=first_mode)
-        .reset_index()
-    )
-    complaint_type_coverage = complaint_type_coverage.merge(
-        top_modeled_by_type, on="complaint_type", how="left"
-    )
-
-    residual_counts = (
-        df["residual_cluster_label"]
-        .astype("string")
-        .fillna("missing")
-        .replace({"<NA>": "missing"})
-        .value_counts()
-        .rename_axis("residual_cluster_label")
-        .reset_index(name="complaints")
-    )
+    overall = load_table(str(NLP_SUMMARY_PATHS["overall"])).iloc[0].to_dict()
+    issue_families = load_table(str(NLP_SUMMARY_PATHS["issue_families"])).copy()
+    modeled_subtypes = load_table(str(NLP_SUMMARY_PATHS["modeled_subtypes"])).copy()
+    subtype_source = load_table(str(NLP_SUMMARY_PATHS["subtype_source"])).copy()
+    outcome_groups = load_table(str(NLP_SUMMARY_PATHS["outcome_groups"])).copy()
+    outcome_confidence = load_table(str(NLP_SUMMARY_PATHS["outcome_confidence"])).copy()
+    complaint_type_coverage = load_table(
+        str(NLP_SUMMARY_PATHS["complaint_type_coverage"])
+    ).copy()
+    residual_counts = load_table(str(NLP_SUMMARY_PATHS["residual_counts"])).copy()
     nonmissing_residual = residual_counts.loc[
         ~residual_counts["residual_cluster_label"].isin(
             ["missing", "<NA>", "nan", "None"]
         )
-    ]
-
-    outcome_by_complaint_type = (
-        df.groupby(["resolution_outcome_group", "complaint_type"], observed=True)
-        .size()
-        .reset_index(name="complaints")
-        .sort_values(
-            ["resolution_outcome_group", "complaints"], ascending=[True, False]
-        )
-    )
-    outcome_by_agency = (
-        df.groupby(["resolution_outcome_group", "agency"], observed=True)
-        .size()
-        .reset_index(name="complaints")
-        .sort_values(
-            ["resolution_outcome_group", "complaints"], ascending=[True, False]
-        )
-    )
-
-    community_board_metrics = load_table(str(COMMUNITY_BOARD_METRICS_PATH))
-    agency_metrics = load_table(str(AGENCY_METRICS_PATH))
-    board_top_subtypes = (
-        community_board_metrics.loc[
-            community_board_metrics["top_issue_subtype"].notna()
-        ]
-        .loc[
-            community_board_metrics["top_issue_subtype"]
-            .astype("string")
-            .ne("not_modeled")
-        ]["top_issue_subtype"]
-        .astype("string")
-        .value_counts()
-        .rename_axis("issue_subtype")
-        .reset_index(name="boards")
-    )
-    agency_top_subtypes = agency_metrics.loc[
-        :, ["agency", "complaints", "top_modeled_subtype"]
     ].copy()
+    outcome_by_complaint_type = load_table(
+        str(NLP_SUMMARY_PATHS["outcome_by_complaint_type"])
+    ).copy()
+    outcome_by_agency = load_table(str(NLP_SUMMARY_PATHS["outcome_by_agency"])).copy()
+    board_top_subtypes = load_table(str(NLP_SUMMARY_PATHS["board_top_subtypes"])).copy()
+    agency_top_subtypes = load_table(
+        str(NLP_SUMMARY_PATHS["agency_top_subtypes"])
+    ).copy()
 
     return {
         "overall": overall,
@@ -900,74 +651,10 @@ def build_nlp_summary() -> dict[str, Any]:
 
 @st.cache_data(show_spinner=False)
 def build_geo_summary() -> dict[str, Any]:
-    analytic = read_analytic_columns(
-        ["unique_key", "latitude", "longitude", "borough", "complaint_type"]
-    )
-    analytic["valid_coordinate_flag"] = (
-        analytic["latitude"].notna()
-        & analytic["longitude"].notna()
-        & analytic["latitude"].between(*NYC_LAT_RANGE)
-        & analytic["longitude"].between(*NYC_LON_RANGE)
-    )
-
-    borough_coverage = (
-        analytic.groupby("borough", observed=True)
-        .agg(
-            complaints=("valid_coordinate_flag", "size"),
-            geocoded_complaints=("valid_coordinate_flag", "sum"),
-        )
-        .reset_index()
-    )
-    borough_coverage["geocoded_share"] = (
-        borough_coverage["geocoded_complaints"] / borough_coverage["complaints"]
-    )
-    borough_coverage = borough_coverage.sort_values(
-        "complaints", ascending=False
-    ).reset_index(drop=True)
-
-    grid_monthly = load_table(str(GRID_MONTHLY_PATH)).copy()
-    grid_monthly["created_month_start"] = pd.to_datetime(
-        grid_monthly["created_month_start"], errors="coerce"
-    )
-    grid_monthly["hotspot_threshold"] = grid_monthly.groupby("created_month_start")[
-        "complaints"
-    ].transform(lambda series: series.quantile(0.9))
-    grid_monthly["is_hotspot"] = grid_monthly["complaints"].ge(
-        grid_monthly["hotspot_threshold"]
-    )
-    hotspot_monthly = (
-        grid_monthly.groupby("created_month_start", observed=True)
-        .agg(
-            hotspot_cells=("is_hotspot", "sum"),
-            hotspot_complaints=(
-                "complaints",
-                lambda series: int(
-                    series[grid_monthly.loc[series.index, "is_hotspot"]].sum()
-                ),
-            ),
-            total_complaints=("complaints", "sum"),
-        )
-        .reset_index()
-    )
-    hotspot_monthly["hotspot_complaint_share"] = (
-        hotspot_monthly["hotspot_complaints"] / hotspot_monthly["total_complaints"]
-    )
-    hotspot_monthly = add_month_label(hotspot_monthly)
-
-    subtypes = read_nlp_columns(["unique_key", "issue_subtype", "subtype_modeled_flag"])
-    hotspot_frame = analytic.merge(
-        subtypes, on="unique_key", how="left", validate="one_to_one"
-    )
-    complaint_hotspots = summarize_hotspot_grids(
-        hotspot_frame, "complaint_type", top_n_categories=6, top_n_grids=3
-    )
-    modeled_only = hotspot_frame.loc[
-        hotspot_frame["subtype_modeled_flag"]
-        & hotspot_frame["issue_subtype"].astype("string").ne("not_modeled")
-    ].copy()
-    subtype_hotspots = summarize_hotspot_grids(
-        modeled_only, "issue_subtype", top_n_categories=6, top_n_grids=3
-    )
+    borough_coverage = load_table(str(GEO_SUMMARY_PATHS["borough_coverage"])).copy()
+    hotspot_monthly = load_table(str(GEO_SUMMARY_PATHS["hotspot_monthly"])).copy()
+    complaint_hotspots = load_table(str(GEO_SUMMARY_PATHS["complaint_hotspots"])).copy()
+    subtype_hotspots = load_table(str(GEO_SUMMARY_PATHS["subtype_hotspots"])).copy()
 
     return {
         "borough_coverage": borough_coverage,
