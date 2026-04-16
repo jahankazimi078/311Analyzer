@@ -4,6 +4,8 @@
 
 The repo turns raw 311 records into a cleaned analytic dataset, enriches it with complaint-text taxonomy and neighborhood context, builds reusable geospatial and operations scorecards, evaluates neighborhood equity patterns, and finishes with a presentable interactive dashboard.
 
+[The Streamlit Community Cloud dashboard can be accessed here](https://jahank-311analyzer.streamlit.app/)
+
 ## What The Project Does
 
 The workflow is organized as a sequence of reusable data products rather than one giant notebook.
@@ -191,36 +193,10 @@ They now import the renamed modules (`geo`, `operations`, `fairness`, `predictiv
 
 ### Build the deployable dashboard bundle
 
-For Streamlit Cloud, the app now supports a committed lightweight artifact bundle under `data/deploy/`.
-
 Rebuild it from your full local analytics with:
 
 ```bash
 ./.venv/bin/python data/build_deploy_artifacts.py
 ```
 
-The dashboard loader prefers the full local files under `data/analytics/` and `data/reference/`, but if those are missing it automatically falls back to the reduced deployment bundle.
 
-## Repo Conventions
-
-- large local data artifacts are intentionally ignored by git
-- `data/` is local storage, not a place for committed heavy outputs
-- notebooks and lightweight build scripts are meant to stay in version control
-- the dashboard is the presentable final surface, while the notebooks remain the analytical deep dives
-
-## Publish Notes
-
-Before publishing, make sure you do **not** commit:
-
-- raw CSV files
-- local parquet outputs under `data/analytics/`
-- SQLite databases
-- virtual environments
-- IDE settings
-- local model or dashboard cache artifacts
-
-Those are all treated as local build products rather than source code.
-
-Exception:
-
-- `data/deploy/` is intended to be committed because it contains the reduced dashboard-only artifacts used for Streamlit Cloud deployment.
