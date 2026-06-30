@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NYC 311 Analyzer — Jahan Kazimi</title>
+  <meta name="description" content="An end-to-end analysis of ~4.8M NYC 311 service requests (2025–2026): cleaning, NLP enrichment, geospatial burden mapping, operations scorecards, neighborhood equity, and resolution-time forecasting."/>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #fafaf8;
+      --white: #ffffff;
+      --text: #1a1a1a;
+      --muted: #888;
+      --border: #e0e0d8;
+      --accent: #1a1a1a;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-weight: 300;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    a { color: inherit; }
+
+    /* ── TOP NAV ── */
+    .topbar {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.9rem 1rem;
+    }
+    .topbar a {
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      padding: 0.35rem 1.2rem;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      transition: all 0.2s;
+    }
+    .topbar a:hover { color: var(--text); border-color: var(--border); }
+
+    /* ── LAYOUT ── */
+    .page { max-width: 980px; margin: 0 auto; padding: 0 1.5rem; }
+
+    /* ── HERO ── */
+    .hero { text-align: center; padding: 4.5rem 0 2.5rem; }
+    .eyebrow {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1.4rem;
+    }
+    .hero h1 {
+      font-size: clamp(2.6rem, 6vw, 4.2rem);
+      font-weight: 500;
+      line-height: 1.05;
+      letter-spacing: -0.01em;
+      margin-bottom: 1.2rem;
+    }
+    .hero p {
+      font-size: 1.3rem;
+      max-width: 640px;
+      margin: 0 auto 2rem;
+      color: #444;
+    }
+    .cta-row { display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      text-decoration: none;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.78rem;
+      letter-spacing: 0.06em;
+      padding: 0.7rem 1.4rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--white);
+      color: var(--text);
+      transition: all 0.2s;
+    }
+    .btn:hover { border-color: var(--text); transform: translateY(-1px); }
+    .btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .btn.primary:hover { opacity: 0.85; }
+
+    /* ── STATS ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      margin: 1rem 0 4rem;
+    }
+    .stat { background: var(--white); padding: 1.8rem 1rem; text-align: center; }
+    .stat .num {
+      font-size: 2.2rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      display: block;
+    }
+    .stat .lbl {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.66rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 0.4rem;
+    }
+
+    /* ── SECTIONS ── */
+    section { margin-bottom: 4rem; }
+    .sec-head {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.7rem;
+      margin-bottom: 1.8rem;
+    }
+    .lead { font-size: 1.25rem; color: #333; max-width: 760px; }
+    .lead + .lead { margin-top: 1rem; }
+
+    /* ── NOTEBOOK CARDS ── */
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.1rem; }
+    .card {
+      display: block;
+      text-decoration: none;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.6rem 1.7rem;
+      transition: all 0.2s;
+    }
+    .card:hover { border-color: var(--text); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.05); }
+    .card .step {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+    }
+    .card h3 { font-size: 1.6rem; font-weight: 500; margin: 0.4rem 0 0.5rem; }
+    .card p { font-size: 1.08rem; color: #555; }
+    .card .arrow { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: var(--muted); margin-top: 0.9rem; }
+    .card:hover .arrow { color: var(--text); }
+
+    /* ── FLOW ── */
+    .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .flow-step { background: var(--white); padding: 1.4rem 1.3rem; }
+    .flow-step .n { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--muted); }
+    .flow-step h4 { font-size: 1.25rem; font-weight: 500; margin: 0.3rem 0 0.4rem; }
+    .flow-step p { font-size: 0.98rem; color: #666; }
+
+    .note {
+      font-size: 1.02rem;
+      color: #666;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--text);
+      padding: 1rem 1.3rem;
+      border-radius: 4px;
+      margin-top: 1.5rem;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center;
+      padding: 2.5rem 1.5rem 3rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    footer a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--border); }
+    footer a:hover { border-color: var(--text); }
+
+    @media (max-width: 720px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .cards { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <a href="#overview">Overview</a>
+    <a href="#analysis">Analysis</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="https://jahank-311analyzer.streamlit.app/" target="_blank" rel="noopener">Live Dashboard ↗</a>
+    <a href="https://github.com/jahankazimi078/311Analyzer" target="_blank" rel="noopener">GitHub ↗</a>
+  </nav>
+
+  <div class="page">
+    <header class="hero" id="overview">
+      <div class="eyebrow">Data Science · NYC Open Data · 2025–2026</div>
+      <h1>NYC 311 Analyzer</h1>
+      <p>An end-to-end study of roughly 4.8&nbsp;million New York City 311 service requests — from raw records to an interactive dashboard, equity audit, and resolution-time forecasting model.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="https://jahank-311analyzer.streamlit.app/" target="_blank" rel="noopener">Open Live Dashboard ↗</a>
+        <a class="btn" href="notebooks/EDA.html">Browse the Analysis</a>
+        <a class="btn" href="https://github.com/jahankazimi078/311Analyzer" target="_blank" rel="noopener">View Source ↗</a>
+      </div>
+    </header>
+
+    <div class="stats">
+      <div class="stat"><span class="num">~4.8M</span><span class="lbl">311 requests</span></div>
+      <div class="stat"><span class="num">5</span><span class="lbl">boroughs</span></div>
+      <div class="stat"><span class="num">6</span><span class="lbl">analysis layers</span></div>
+      <div class="stat"><span class="num">66%</span><span class="lbl">forecast accuracy</span></div>
+    </div>
+
+    <section id="about">
+      <div class="sec-head">What this project is</div>
+      <p class="lead">311 is New York City's hub for non-emergency complaints — illegal parking, residential noise, missing heat, blocked driveways. This project turns those raw records into a sequence of reusable data products: a cleaned analytic dataset, a complaint-text taxonomy, geospatial and operational scorecards, a neighborhood-equity audit, and a forecasting model for how long a request will take to resolve.</p>
+      <div class="note"><strong>Note on the data window:</strong> the analysis is scoped to 2025–2026, where 2026 is partial-year (labeled <em>YTD</em>). Response-time metrics use only rows with valid closure intervals, and data-quality flags are preserved rather than dropping messy rows globally.</div>
+    </section>
+
+    <section id="analysis">
+      <div class="sec-head">The six analysis layers — click to explore each notebook</div>
+      <div class="cards">
+        <a class="card" href="notebooks/EDA.html">
+          <div class="step">LAYER 01</div>
+          <h3>Exploratory Analysis</h3>
+          <p>City-wide patterns: complaint volume by borough and type, seasonal and hourly rhythms, and data-quality checks across the cleaned base.</p>
+          <div class="arrow">Open notebook →</div>
+        </a>
+        <a class="card" href="notebooks/NLP.html">
+          <div class="step">LAYER 02</div>
+          <h3>Text &amp; NLP Enrichment</h3>
+          <p>Maps free-text complaints into issue families and subtypes, and groups closure language into resolution-outcome categories reused downstream.</p>
+          <div class="arrow">Open notebook →</div>
+        </a>
+        <a class="card" href="notebooks/Geo.html">
+          <div class="step">LAYER 03</div>
+          <h3>Geospatial</h3>
+          <p>Burden mapping, hotspot persistence, and community-board views at ZCTA and grid resolution across the five boroughs.</p>
+          <div class="arrow">Open notebook →</div>
+        </a>
+        <a class="card" href="notebooks/Operations.html">
+          <div class="step">LAYER 04</div>
+          <h3>Operations</h3>
+          <p>Service-performance scorecards by agency and complaint type, with monthly trend lines for response and closure behavior.</p>
+          <div class="arrow">Open notebook →</div>
+        </a>
+        <a class="card" href="notebooks/Fairness.html">
+          <div class="step">LAYER 05</div>
+          <h3>Neighborhood Equity</h3>
+          <p>Disparity and adjusted-comparison analysis using ZCTA demographics, with community-board sensitivity checks.</p>
+          <div class="arrow">Open notebook →</div>
+        </a>
+        <a class="card" href="notebooks/Predictive.html">
+          <div class="step">LAYER 06</div>
+          <h3>Predictive Modeling</h3>
+          <p>Multiclass forecasting of resolution-time buckets, trained on 2025 and tested on 2026 YTD — gradient boosting at ~66% accuracy vs. a 59% majority baseline.</p>
+          <div class="arrow">Open notebook →</div>
+        </a>
+      </div>
+    </section>
+
+    <section id="findings">
+      <div class="sec-head">A few headline findings</div>
+      <p class="lead"><strong>Volume is concentrated.</strong> Illegal Parking (~742K), Residential Noise (~560K), and Heat/Hot Water (~492K) dominate complaint volume; Brooklyn files the most requests of any borough.</p>
+      <p class="lead"><strong>Resolution time is predictable, to a point.</strong> A histogram gradient-boosting model lifts overall accuracy from a 59% majority baseline to ~66%, and recovers slow ("30+ day") cases that the baseline misses entirely — though mid-range buckets remain the hardest to call.</p>
+      <p class="lead"><strong>Equity matters.</strong> The fairness layer adjusts neighborhood comparisons for demographics so disparities aren't confounded by raw population differences.</p>
+    </section>
+
+    <section id="pipeline">
+      <div class="sec-head">How it's built</div>
+      <div class="flow">
+        <div class="flow-step"><div class="n">01 · INGEST</div><h4>Local storage</h4><p>Raw 311 records land in SQLite and yearly Parquet so analysis never reparses the source CSV.</p></div>
+        <div class="flow-step"><div class="n">02 · CLEAN</div><h4>Analytic base</h4><p>A standardized 2025–2026 Parquet with time features and preserved QA flags.</p></div>
+        <div class="flow-step"><div class="n">03 · ENRICH</div><h4>Text taxonomy</h4><p>Issue families, subtypes, and closure-language groupings layered onto each record.</p></div>
+        <div class="flow-step"><div class="n">04 · BUILD</div><h4>Reusable artifacts</h4><p>Geo, operations, fairness, and predictive builders write tidy Parquet scorecards.</p></div>
+        <div class="flow-step"><div class="n">05 · EXPLAIN</div><h4>Notebooks</h4><p>Six notebooks narrate each layer — the pages linked above.</p></div>
+        <div class="flow-step"><div class="n">06 · SHIP</div><h4>Dashboard</h4><p>A Streamlit app reads the artifacts into one interactive final product.</p></div>
+      </div>
+      <div class="note"><strong>Stack:</strong> Python · pandas · NumPy · PyArrow · scikit-learn · GeoPandas / Shapely · Matplotlib · Streamlit &amp; pydeck. &nbsp;The interactive dashboard runs on Streamlit Community Cloud (it needs a live server, so it isn't part of this static site) — <a href="https://jahank-311analyzer.streamlit.app/" target="_blank" rel="noopener" style="color:var(--text)">open it here ↗</a>.</div>
+    </section>
+  </div>
+
+  <footer>
+    Built by <a href="https://jahankazimi078.github.io/">Jahan Kazimi</a> ·
+    <a href="https://github.com/jahankazimi078/311Analyzer" target="_blank" rel="noopener">Source on GitHub</a> ·
+    Data: NYC Open Data 311 Service Requests
+  </footer>
+</body>
+</html>
