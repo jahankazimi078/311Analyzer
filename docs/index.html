@@ -1,302 +1,1166 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>NYC 311 Analyzer — Jahan Kazimi</title>
-  <meta name="description" content="An end-to-end analysis of ~4.8M NYC 311 service requests (2025–2026): cleaning, NLP enrichment, geospatial burden mapping, operations scorecards, neighborhood equity, and resolution-time forecasting."/>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NYC 311 Analyzer — 4.77M complaints, mapped, measured &amp; modeled</title>
+<meta name="description" content="A fully static, interactive tour of ~4.8M NYC 311 service requests (2025–2026): city patterns, complaint-text NLP, a map of the city drawn from its own complaints, agency scorecards, a neighborhood equity audit, and resolution-time forecasting."/>
+<meta property="og:title" content="NYC 311 Analyzer"/>
+<meta property="og:description" content="The city that never stops talking — 4.77M complaints, mapped, measured and modeled."/>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23FCCC0A'/%3E%3Ctext x='32' y='42' font-family='Helvetica,Arial' font-size='26' font-weight='bold' text-anchor='middle' fill='%23000'%3E311%3C/text%3E%3C/svg%3E"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
-    :root {
-      --bg: #fafaf8;
-      --white: #ffffff;
-      --text: #1a1a1a;
-      --muted: #888;
-      --border: #e0e0d8;
-      --accent: #1a1a1a;
-    }
+:root{
+  --night:#0a0c10;
+  --panel:#10131a;
+  --panel2:#151923;
+  --line:#242a36;
+  --ink:#f2f0e9;
+  --dim:#8b92a0;
+  --faint:#565d6b;
+  --taxi:#FCCC0A;
+  --amber:#F5A623;
+  --r1:#EE352E; --r2:#FF6319; --r3:#FCCC0A; --r4:#00933C; --r5:#2E67D8; --r6:#B933AD;
+  --sans:'Helvetica Neue',Helvetica,Arial,sans-serif;
+  --cond:'Barlow Condensed','Helvetica Neue',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Cormorant Garamond', Georgia, serif;
-      font-weight: 300;
-      line-height: 1.5;
-      min-height: 100vh;
-    }
+html{scroll-behavior:smooth}
+body{
+  background:var(--night);
+  color:var(--ink);
+  font-family:var(--sans);
+  line-height:1.55;
+  overflow-x:hidden;
+}
+/* faint manhattan street grid */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    repeating-linear-gradient(29deg, rgba(252,204,10,0.016) 0 1px, transparent 1px 84px),
+    repeating-linear-gradient(119deg, rgba(252,204,10,0.016) 0 1px, transparent 1px 84px);
+}
+main,nav,footer{position:relative;z-index:1}
+a{color:inherit}
+::selection{background:var(--taxi);color:#000}
 
-    a { color: inherit; }
+.wrap{max-width:1100px;margin:0 auto;padding:0 1.4rem}
 
-    /* ── TOP NAV ── */
-    .topbar {
-      background: var(--white);
-      border-bottom: 1px solid var(--border);
-      position: sticky; top: 0;
-      z-index: 100;
-      display: flex;
-      justify-content: center;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      padding: 0.9rem 1rem;
-    }
-    .topbar a {
-      text-decoration: none;
-      font-size: 0.95rem;
-      font-weight: 400;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      padding: 0.35rem 1.2rem;
-      border: 1px solid transparent;
-      border-radius: 999px;
-      transition: all 0.2s;
-    }
-    .topbar a:hover { color: var(--text); border-color: var(--border); }
+/* ─────────── subway bullets ─────────── */
+.bullet{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:1.9em;height:1.9em;border-radius:50%;
+  font-family:var(--sans);font-weight:700;font-size:0.9em;
+  color:#fff;flex:none;
+}
+.bullet.dark{color:#000}
 
-    /* ── LAYOUT ── */
-    .page { max-width: 980px; margin: 0 auto; padding: 0 1.5rem; }
+/* ─────────── nav ─────────── */
+nav.top{
+  position:sticky;top:0;z-index:50;
+  background:rgba(8,10,14,0.92);backdrop-filter:blur(8px);
+  border-bottom:2px solid var(--line);
+}
+nav.top .bar{
+  max-width:1100px;margin:0 auto;padding:0.65rem 1.4rem;
+  display:flex;align-items:center;gap:1.2rem;
+}
+.brand{display:flex;align-items:center;gap:0.5rem;text-decoration:none;flex:none}
+.brand .bullets{display:flex;gap:3px;font-size:0.95rem}
+.brand .word{
+  font-family:var(--cond);font-weight:700;font-size:1.15rem;
+  letter-spacing:0.14em;text-transform:uppercase;
+}
+.navlinks{
+  display:flex;gap:0.2rem;margin-left:auto;overflow-x:auto;
+  scrollbar-width:none;-ms-overflow-style:none;
+}
+.navlinks::-webkit-scrollbar{display:none}
+.navlinks a{
+  font-family:var(--cond);font-weight:600;font-size:0.92rem;
+  letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;
+  color:var(--dim);padding:0.35rem 0.7rem;border-bottom:2px solid transparent;
+  white-space:nowrap;transition:color .15s;
+}
+.navlinks a:hover{color:var(--taxi)}
 
-    /* ── HERO ── */
-    .hero { text-align: center; padding: 4.5rem 0 2.5rem; }
-    .eyebrow {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.72rem;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 1.4rem;
-    }
-    .hero h1 {
-      font-size: clamp(2.6rem, 6vw, 4.2rem);
-      font-weight: 500;
-      line-height: 1.05;
-      letter-spacing: -0.01em;
-      margin-bottom: 1.2rem;
-    }
-    .hero p {
-      font-size: 1.3rem;
-      max-width: 640px;
-      margin: 0 auto 2rem;
-      color: #444;
-    }
-    .cta-row { display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap; }
-    .btn {
-      text-decoration: none;
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.78rem;
-      letter-spacing: 0.06em;
-      padding: 0.7rem 1.4rem;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      background: var(--white);
-      color: var(--text);
-      transition: all 0.2s;
-    }
-    .btn:hover { border-color: var(--text); transform: translateY(-1px); }
-    .btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
-    .btn.primary:hover { opacity: 0.85; }
+/* ─────────── hero ─────────── */
+header.hero{position:relative;padding:5.5rem 0 0;overflow:hidden;border-bottom:2px solid var(--line)}
+.skyline{position:absolute;left:0;right:0;bottom:2.55rem;width:100%;height:auto;opacity:.9;pointer-events:none}
+.hero-inner{position:relative;text-align:center;padding-bottom:12rem}
+.streetsign{
+  display:inline-flex;align-items:center;gap:0.55rem;
+  background:#00703C;border:2px solid #fff;border-radius:6px;
+  padding:0.32rem 1rem;margin-bottom:1.8rem;
+  font-family:var(--cond);font-weight:600;font-size:1rem;
+  letter-spacing:0.18em;text-transform:uppercase;color:#fff;
+  box-shadow:0 4px 18px rgba(0,0,0,0.5);
+}
+.streetsign small{font-size:0.72em;opacity:.85}
+h1.title{
+  font-family:var(--cond);font-weight:700;
+  font-size:clamp(3rem,9vw,6.4rem);line-height:0.98;
+  letter-spacing:0.015em;text-transform:uppercase;
+  margin:0 auto 1rem;max-width:900px;
+}
+h1.title .yellow{color:var(--taxi)}
+.hero-sub{
+  max-width:640px;margin:0 auto 2rem;color:var(--dim);font-size:1.08rem;
+}
+.hero-sub strong{color:var(--ink);font-weight:500}
+.bignum{
+  font-family:var(--mono);font-weight:600;
+  font-size:clamp(2rem,5.5vw,3.4rem);letter-spacing:0.04em;
+  color:var(--taxi);display:block;margin-bottom:0.2rem;
+  text-shadow:0 0 30px rgba(252,204,10,0.35);
+  font-variant-numeric:tabular-nums;
+}
+.bignum-lbl{
+  font-family:var(--cond);font-weight:600;font-size:0.95rem;
+  letter-spacing:0.3em;text-transform:uppercase;color:var(--dim);
+  display:block;margin-bottom:2.2rem;
+}
+.cta{display:flex;gap:0.8rem;justify-content:center;flex-wrap:wrap}
+.btn{
+  font-family:var(--cond);font-weight:600;font-size:1rem;
+  letter-spacing:0.14em;text-transform:uppercase;text-decoration:none;
+  padding:0.7rem 1.5rem;border:2px solid var(--line);border-radius:4px;
+  color:var(--ink);background:rgba(16,19,26,0.7);transition:all .18s;
+}
+.btn:hover{border-color:var(--taxi);color:var(--taxi);transform:translateY(-2px)}
+.btn.primary{background:var(--taxi);border-color:var(--taxi);color:#000}
+.btn.primary:hover{color:#000;box-shadow:0 6px 24px rgba(252,204,10,0.35)}
 
-    /* ── STATS ── */
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 1px;
-      background: var(--border);
-      border: 1px solid var(--border);
-      margin: 1rem 0 4rem;
-    }
-    .stat { background: var(--white); padding: 1.8rem 1rem; text-align: center; }
-    .stat .num {
-      font-size: 2.2rem;
-      font-weight: 500;
-      letter-spacing: -0.01em;
-      display: block;
-    }
-    .stat .lbl {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.66rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-top: 0.4rem;
-    }
+/* ticker */
+.ticker{
+  background:#000;border-top:2px solid #1b1f28;
+  overflow:hidden;white-space:nowrap;position:relative;
+  padding:0.55rem 0;
+}
+.ticker .track{display:inline-block;animation:tick 90s linear infinite}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.ticker span{
+  font-family:var(--mono);font-size:0.8rem;letter-spacing:0.06em;
+  color:var(--amber);text-shadow:0 0 8px rgba(245,166,35,0.55);
+}
+.ticker .sep{color:var(--faint);margin:0 1.2rem;text-shadow:none}
+.ticker .b{color:var(--taxi)}
+.ticker .dim{color:#9a6d1f}
 
-    /* ── SECTIONS ── */
-    section { margin-bottom: 4rem; }
-    .sec-head {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.72rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--muted);
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 0.7rem;
-      margin-bottom: 1.8rem;
-    }
-    .lead { font-size: 1.25rem; color: #333; max-width: 760px; }
-    .lead + .lead { margin-top: 1rem; }
+/* ─────────── stats strip ─────────── */
+.stats{
+  display:grid;grid-template-columns:repeat(5,1fr);
+  border-bottom:2px solid var(--line);background:var(--panel);
+}
+.stat{padding:1.6rem 1rem;text-align:center;border-right:1px solid var(--line)}
+.stat:last-child{border-right:0}
+.stat .n{
+  font-family:var(--mono);font-weight:600;font-size:1.7rem;color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.stat .n em{font-style:normal;color:var(--taxi)}
+.stat .l{
+  font-family:var(--cond);font-weight:600;font-size:0.82rem;
+  letter-spacing:0.22em;text-transform:uppercase;color:var(--dim);margin-top:0.3rem;
+}
 
-    /* ── NOTEBOOK CARDS ── */
-    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.1rem; }
-    .card {
-      display: block;
-      text-decoration: none;
-      background: var(--white);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 1.6rem 1.7rem;
-      transition: all 0.2s;
-    }
-    .card:hover { border-color: var(--text); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.05); }
-    .card .step {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.68rem;
-      letter-spacing: 0.14em;
-      color: var(--muted);
-    }
-    .card h3 { font-size: 1.6rem; font-weight: 500; margin: 0.4rem 0 0.5rem; }
-    .card p { font-size: 1.08rem; color: #555; }
-    .card .arrow { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: var(--muted); margin-top: 0.9rem; }
-    .card:hover .arrow { color: var(--text); }
+/* ─────────── sections ─────────── */
+section{padding:4.5rem 0 3.5rem;border-bottom:2px solid var(--line)}
+.sec-head{display:flex;align-items:center;gap:0.9rem;margin-bottom:0.5rem;flex-wrap:wrap}
+.sec-head .bullet{font-size:1.35rem}
+.sec-head h2{
+  font-family:var(--cond);font-weight:700;font-size:clamp(1.9rem,4.5vw,3rem);
+  letter-spacing:0.03em;text-transform:uppercase;line-height:1;
+}
+.sec-head .nb{
+  margin-left:auto;font-family:var(--cond);font-weight:600;font-size:0.95rem;
+  letter-spacing:0.14em;text-transform:uppercase;text-decoration:none;
+  color:var(--taxi);border:1.5px solid rgba(252,204,10,0.45);border-radius:4px;
+  padding:0.35rem 0.9rem;transition:all .15s;white-space:nowrap;
+}
+.sec-head .nb:hover{background:var(--taxi);color:#000}
+.sec-sub{color:var(--dim);max-width:720px;margin-bottom:2.2rem;font-size:1.02rem}
+.sec-sub strong{color:var(--ink);font-weight:500}
 
-    /* ── FLOW ── */
-    .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-    .flow-step { background: var(--white); padding: 1.4rem 1.3rem; }
-    .flow-step .n { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--muted); }
-    .flow-step h4 { font-size: 1.25rem; font-weight: 500; margin: 0.3rem 0 0.4rem; }
-    .flow-step p { font-size: 0.98rem; color: #666; }
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.4rem}
+.grid32{display:grid;grid-template-columns:3fr 2fr;gap:1.4rem}
 
-    .note {
-      font-size: 1.02rem;
-      color: #666;
-      background: var(--white);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--text);
-      padding: 1rem 1.3rem;
-      border-radius: 4px;
-      margin-top: 1.5rem;
-    }
+.panel{
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:1.4rem 1.5rem 1.5rem;
+}
+.panel h3{
+  font-family:var(--cond);font-weight:600;font-size:1.15rem;
+  letter-spacing:0.16em;text-transform:uppercase;color:var(--ink);
+  margin-bottom:0.2rem;
+}
+.panel .hint{font-family:var(--mono);font-size:0.72rem;color:var(--faint);margin-bottom:1.1rem;letter-spacing:0.03em}
+.panel.mt{margin-top:1.4rem}
 
-    /* ── FOOTER ── */
-    footer {
-      border-top: 1px solid var(--border);
-      text-align: center;
-      padding: 2.5rem 1.5rem 3rem;
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
-    footer a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--border); }
-    footer a:hover { border-color: var(--text); }
+svg.chart{width:100%;height:auto;display:block}
+svg.chart text{font-family:var(--mono)}
 
-    @media (max-width: 720px) {
-      .stats { grid-template-columns: repeat(2, 1fr); }
-      .cards { grid-template-columns: 1fr; }
-      .flow { grid-template-columns: 1fr; }
-    }
-  </style>
+/* hbar rows */
+.hbars{display:flex;flex-direction:column;gap:0.55rem}
+.hb{display:grid;grid-template-columns:150px 1fr 74px;align-items:center;gap:0.8rem}
+.hb .lbl{
+  font-family:var(--cond);font-weight:600;font-size:0.95rem;letter-spacing:0.05em;
+  text-transform:uppercase;color:var(--dim);text-align:right;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.hb .bar{height:16px;background:var(--panel2);border-radius:3px;overflow:hidden}
+.hb .fill{height:100%;border-radius:3px;background:var(--taxi);transform-origin:left;animation:grow 0.9s cubic-bezier(.2,.7,.2,1) both}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.hb .val{font-family:var(--mono);font-size:0.78rem;color:var(--dim);text-align:left;font-variant-numeric:tabular-nums}
+
+/* heatmap */
+.hm{display:grid;gap:2px;grid-template-columns:44px repeat(24,1fr)}
+.hm .cell{aspect-ratio:1/1;border-radius:2px;min-width:0}
+.hm .rowl,.hm .coll{
+  font-family:var(--mono);font-size:0.62rem;color:var(--faint);
+  display:flex;align-items:center;justify-content:center;
+}
+.hm .rowl{justify-content:flex-end;padding-right:6px}
+
+/* map */
+#mapwrap{position:relative}
+#nycmap{width:100%;display:block;border-radius:6px;background:#07090d;cursor:crosshair}
+.maplegend{
+  display:flex;align-items:center;gap:0.6rem;margin-top:0.8rem;
+  font-family:var(--mono);font-size:0.7rem;color:var(--faint);
+}
+.maplegend .ramp{height:8px;flex:1;max-width:220px;border-radius:4px;
+  background:linear-gradient(90deg,#161c28,#78421a,#e68c14,#fce050)}
+
+/* boards & agency departure board */
+.dep{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:0.8rem}
+.dep th{
+  font-family:var(--cond);font-weight:600;font-size:0.85rem;letter-spacing:0.18em;
+  text-transform:uppercase;color:var(--faint);text-align:left;
+  padding:0.4rem 0.6rem;border-bottom:2px solid var(--line);
+}
+.dep td{padding:0.48rem 0.6rem;border-bottom:1px solid #1a1f29;color:var(--dim);font-variant-numeric:tabular-nums}
+.dep td.k{color:var(--ink)}
+.dep .code{
+  display:inline-block;background:#000;border:1px solid #333;color:var(--amber);
+  border-radius:3px;padding:0.06rem 0.45rem;font-weight:600;letter-spacing:0.08em;
+  text-shadow:0 0 8px rgba(245,166,35,0.5);
+}
+.dep .mini{display:inline-block;height:8px;border-radius:2px;background:var(--taxi);vertical-align:middle}
+.dep tr:hover td{background:rgba(252,204,10,0.04)}
+
+/* borough chips */
+.chip{
+  display:inline-block;font-family:var(--cond);font-weight:600;font-size:0.78rem;
+  letter-spacing:0.1em;padding:0.05rem 0.5rem;border-radius:3px;color:#000;
+}
+
+/* stacked bar */
+.stack{display:flex;height:34px;border-radius:5px;overflow:hidden;margin:0.6rem 0 0.9rem}
+.stack div{height:100%;min-width:1px}
+.stack-legend{display:flex;flex-wrap:wrap;gap:0.9rem;font-family:var(--mono);font-size:0.72rem;color:var(--dim)}
+.stack-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+/* confusion matrix */
+.cm{display:grid;gap:3px;font-family:var(--mono)}
+.cm .h{font-size:0.62rem;color:var(--faint);display:flex;align-items:flex-end;justify-content:center;text-align:center;padding-bottom:4px}
+.cm .rl{font-size:0.62rem;color:var(--faint);display:flex;align-items:center;justify-content:flex-end;padding-right:8px;text-align:right}
+.cm .c{
+  aspect-ratio:1.6/1;border-radius:3px;display:flex;align-items:center;justify-content:center;
+  font-size:0.72rem;font-weight:500;color:var(--ink);min-width:0;
+}
+.cm .c.diag{outline:1.5px solid rgba(252,204,10,0.65);outline-offset:-1.5px}
+
+/* pipeline subway line */
+.lineWrap{padding:1.2rem 0 0.6rem;overflow-x:auto;overflow-y:hidden}
+.subline{display:flex;min-width:760px;position:relative;padding:4.6rem 1rem}
+.subline::before{
+  content:"";position:absolute;left:2rem;right:2rem;top:50%;height:6px;
+  background:var(--taxi);border-radius:3px;transform:translateY(-50%);
+  box-shadow:0 0 22px rgba(252,204,10,0.3);
+}
+.stationCol{flex:1;position:relative;display:flex;flex-direction:column;align-items:center}
+.station{
+  width:20px;height:20px;border-radius:50%;background:#fff;border:5px solid #000;
+  outline:3px solid var(--taxi);position:relative;z-index:2;flex:none;
+}
+.stationCol .up,.stationCol .dn{position:absolute;left:50%;transform:translateX(-50%);width:130px;text-align:center}
+.stationCol .up{bottom:calc(50% + 24px)}
+.stationCol .dn{top:calc(50% + 24px)}
+.stationCol .nm{font-family:var(--cond);font-weight:700;font-size:1.05rem;letter-spacing:0.1em;text-transform:uppercase}
+.stationCol .ds{font-family:var(--mono);font-size:0.62rem;color:var(--dim);line-height:1.45;margin-top:2px}
+
+/* notebook cards */
+.nbgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem}
+.nbcard{
+  display:block;text-decoration:none;background:var(--panel);
+  border:1px solid var(--line);border-top:4px solid var(--cardc,var(--taxi));
+  border-radius:8px;padding:1.4rem 1.4rem 1.2rem;transition:all .18s;
+}
+.nbcard:hover{transform:translateY(-4px);border-color:var(--cardc);box-shadow:0 14px 40px rgba(0,0,0,0.5)}
+.nbcard .rowt{display:flex;align-items:center;gap:0.6rem;margin-bottom:0.55rem}
+.nbcard h3{font-family:var(--cond);font-weight:700;font-size:1.5rem;letter-spacing:0.04em;text-transform:uppercase;line-height:1}
+.nbcard p{font-size:0.9rem;color:var(--dim)}
+.nbcard .go{
+  font-family:var(--mono);font-size:0.7rem;letter-spacing:0.1em;color:var(--faint);
+  margin-top:0.9rem;transition:color .15s;
+}
+.nbcard:hover .go{color:var(--cardc)}
+
+/* findings */
+.findings{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem}
+.finding{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:1.3rem 1.4rem}
+.finding .fn{font-family:var(--mono);font-size:0.68rem;color:var(--taxi);letter-spacing:0.14em;margin-bottom:0.5rem}
+.finding p{font-size:0.93rem;color:var(--dim)}
+.finding p strong{color:var(--ink);font-weight:500}
+
+/* tooltip */
+#tip{
+  position:fixed;z-index:99;pointer-events:none;display:none;
+  background:#000;border:1px solid var(--taxi);border-radius:5px;
+  padding:0.45rem 0.7rem;font-family:var(--mono);font-size:0.72rem;color:var(--ink);
+  max-width:260px;line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,0.7);
+}
+#tip .t{color:var(--taxi);font-weight:600}
+
+/* footer */
+footer{padding:3.5rem 1.4rem 4rem;text-align:center}
+.footsign{
+  display:inline-flex;align-items:center;gap:0.6rem;background:#00703C;border:2px solid #fff;
+  border-radius:6px;padding:0.4rem 1.3rem;margin-bottom:1.4rem;
+  font-family:var(--cond);font-weight:700;font-size:1.25rem;letter-spacing:0.2em;
+  text-transform:uppercase;color:#fff;box-shadow:0 6px 24px rgba(0,0,0,0.5);
+}
+.footsign small{font-size:0.6em;font-weight:600;opacity:.8}
+footer p{color:var(--faint);font-family:var(--mono);font-size:0.75rem;margin-top:0.4rem}
+footer a{color:var(--dim);text-decoration:none;border-bottom:1px solid var(--line)}
+footer a:hover{color:var(--taxi);border-color:var(--taxi)}
+
+@media (max-width:900px){
+  .grid2,.grid32{grid-template-columns:1fr}
+  .nbgrid,.findings{grid-template-columns:1fr 1fr}
+  .stats{grid-template-columns:repeat(3,1fr)}
+  .stat:nth-child(n+4){border-top:1px solid var(--line)}
+}
+@media (max-width:600px){
+  .nbgrid,.findings{grid-template-columns:1fr}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .hb{grid-template-columns:96px 1fr 64px}
+  .sec-head .nb{margin-left:0}
+}
+</style>
 </head>
 <body>
-  <nav class="topbar">
-    <a href="#overview">Overview</a>
-    <a href="#analysis">Analysis</a>
-    <a href="#pipeline">Pipeline</a>
-    <a href="https://jahank-311analyzer.streamlit.app/" target="_blank" rel="noopener">Live Dashboard ↗</a>
-    <a href="https://github.com/jahankazimi078/311Analyzer" target="_blank" rel="noopener">GitHub ↗</a>
-  </nav>
 
-  <div class="page">
-    <header class="hero" id="overview">
-      <div class="eyebrow">Data Science · NYC Open Data · 2025–2026</div>
-      <h1>NYC 311 Analyzer</h1>
-      <p>An end-to-end study of roughly 4.8&nbsp;million New York City 311 service requests — from raw records to an interactive dashboard, equity audit, and resolution-time forecasting model.</p>
-      <div class="cta-row">
-        <a class="btn primary" href="https://jahank-311analyzer.streamlit.app/" target="_blank" rel="noopener">Open Live Dashboard ↗</a>
-        <a class="btn" href="notebooks/EDA.html">Browse the Analysis</a>
-        <a class="btn" href="https://github.com/jahankazimi078/311Analyzer" target="_blank" rel="noopener">View Source ↗</a>
+<nav class="top">
+  <div class="bar">
+    <a class="brand" href="#top">
+      <span class="bullets" aria-hidden="true">
+        <span class="bullet" style="background:var(--r1)">3</span>
+        <span class="bullet" style="background:var(--r1)">1</span>
+        <span class="bullet" style="background:var(--r1)">1</span>
+      </span>
+      <span class="word">Analyzer · NYC</span>
+    </a>
+    <div class="navlinks">
+      <a href="#patterns">Patterns</a>
+      <a href="#language">Language</a>
+      <a href="#map">The Map</a>
+      <a href="#operations">Operations</a>
+      <a href="#equity">Equity</a>
+      <a href="#forecast">Forecast</a>
+      <a href="#notebooks">Notebooks</a>
+      <a href="https://github.com/jahankazimi078/311Analyzer" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<main id="top">
+<header class="hero">
+  <svg class="skyline" id="skyline" viewBox="0 0 1200 230" preserveAspectRatio="xMidYMax slice" aria-hidden="true"></svg>
+  <div class="wrap hero-inner">
+    <div class="streetsign"><small>▲</small> NYC OPEN DATA <small>·</small> 2025 – 2026 YTD <small>▲</small></div>
+    <h1 class="title">The city that never<br/>stops <span class="yellow">talking.</span></h1>
+    <p class="hero-sub">Every rattling radiator, blocked hydrant and 3&nbsp;a.m. party in New York ends up in one dataset. This project cleans it, reads it, maps it, audits it — and predicts how long City Hall will take to respond. <strong>Fully static: everything below is real data, baked into this page.</strong></p>
+    <span class="bignum" id="bignum">0</span>
+    <span class="bignum-lbl">311 service requests analyzed</span>
+    <div class="cta">
+      <a class="btn primary" href="https://jahank-311analyzer.streamlit.app/" target="_blank" rel="noopener">Live Dashboard ↗</a>
+      <a class="btn" href="#notebooks">Read the Analysis</a>
+      <a class="btn" href="https://github.com/jahankazimi078/311Analyzer" target="_blank" rel="noopener">Source Code ↗</a>
+    </div>
+  </div>
+  <div class="ticker" aria-hidden="true"><div class="track" id="ticker"></div></div>
+</header>
+
+<div class="stats" id="stats"></div>
+
+<!-- ①  CITY PATTERNS -->
+<section id="patterns">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="bullet" style="background:var(--r1)">1</span>
+      <h2>City Patterns</h2>
+      <a class="nb" href="notebooks/EDA.html">Open EDA notebook →</a>
+    </div>
+    <p class="sec-sub">The cleaned 2025–2026 analytic base, explored end to end. <strong>2026 is partial-year (YTD)</strong> — the data runs through April 10, 2026 — and quality flags are preserved instead of silently dropping messy rows.</p>
+
+    <div class="grid2">
+      <div class="panel">
+        <h3>Monthly volume — 2025 vs 2026</h3>
+        <div class="hint">hover the dots · 2026-04 is a partial month</div>
+        <svg class="chart" id="monthly" viewBox="0 0 800 300"></svg>
       </div>
-    </header>
-
-    <div class="stats">
-      <div class="stat"><span class="num">~4.8M</span><span class="lbl">311 requests</span></div>
-      <div class="stat"><span class="num">5</span><span class="lbl">boroughs</span></div>
-      <div class="stat"><span class="num">6</span><span class="lbl">analysis layers</span></div>
-      <div class="stat"><span class="num">66%</span><span class="lbl">forecast accuracy</span></div>
+      <div class="panel">
+        <h3>Complaints by hour of day</h3>
+        <div class="hint">when the city picks up the phone</div>
+        <svg class="chart" id="hourly" viewBox="0 0 800 300"></svg>
+      </div>
     </div>
 
-    <section id="about">
-      <div class="sec-head">What this project is</div>
-      <p class="lead">311 is New York City's hub for non-emergency complaints — illegal parking, residential noise, missing heat, blocked driveways. This project turns those raw records into a sequence of reusable data products: a cleaned analytic dataset, a complaint-text taxonomy, geospatial and operational scorecards, a neighborhood-equity audit, and a forecasting model for how long a request will take to resolve.</p>
-      <div class="note"><strong>Note on the data window:</strong> the analysis is scoped to 2025–2026, where 2026 is partial-year (labeled <em>YTD</em>). Response-time metrics use only rows with valid closure intervals, and data-quality flags are preserved rather than dropping messy rows globally.</div>
-    </section>
+    <div class="panel mt">
+      <h3>The pulse of the city — weekday × hour</h3>
+      <div class="hint">brighter = more complaints filed · hover any cell</div>
+      <div class="hm" id="heatmap"></div>
+    </div>
 
-    <section id="analysis">
-      <div class="sec-head">The six analysis layers — click to explore each notebook</div>
-      <div class="cards">
-        <a class="card" href="notebooks/EDA.html">
-          <div class="step">LAYER 01</div>
-          <h3>Exploratory Analysis</h3>
-          <p>City-wide patterns: complaint volume by borough and type, seasonal and hourly rhythms, and data-quality checks across the cleaned base.</p>
-          <div class="arrow">Open notebook →</div>
-        </a>
-        <a class="card" href="notebooks/NLP.html">
-          <div class="step">LAYER 02</div>
-          <h3>Text &amp; NLP Enrichment</h3>
-          <p>Maps free-text complaints into issue families and subtypes, and groups closure language into resolution-outcome categories reused downstream.</p>
-          <div class="arrow">Open notebook →</div>
-        </a>
-        <a class="card" href="notebooks/Geo.html">
-          <div class="step">LAYER 03</div>
-          <h3>Geospatial</h3>
-          <p>Burden mapping, hotspot persistence, and community-board views at ZCTA and grid resolution across the five boroughs.</p>
-          <div class="arrow">Open notebook →</div>
-        </a>
-        <a class="card" href="notebooks/Operations.html">
-          <div class="step">LAYER 04</div>
-          <h3>Operations</h3>
-          <p>Service-performance scorecards by agency and complaint type, with monthly trend lines for response and closure behavior.</p>
-          <div class="arrow">Open notebook →</div>
-        </a>
-        <a class="card" href="notebooks/Fairness.html">
-          <div class="step">LAYER 05</div>
-          <h3>Neighborhood Equity</h3>
-          <p>Disparity and adjusted-comparison analysis using ZCTA demographics, with community-board sensitivity checks.</p>
-          <div class="arrow">Open notebook →</div>
-        </a>
-        <a class="card" href="notebooks/Predictive.html">
-          <div class="step">LAYER 06</div>
-          <h3>Predictive Modeling</h3>
-          <p>Multiclass forecasting of resolution-time buckets, trained on 2025 and tested on 2026 YTD — gradient boosting at ~66% accuracy vs. a 59% majority baseline.</p>
-          <div class="arrow">Open notebook →</div>
-        </a>
+    <div class="grid2" style="margin-top:1.4rem">
+      <div class="panel">
+        <h3>What New Yorkers complain about</h3>
+        <div class="hint">top complaint types, 2025–2026</div>
+        <div class="hbars" id="toptypes"></div>
       </div>
-    </section>
-
-    <section id="findings">
-      <div class="sec-head">A few headline findings</div>
-      <p class="lead"><strong>Volume is concentrated.</strong> Illegal Parking (~742K), Residential Noise (~560K), and Heat/Hot Water (~492K) dominate complaint volume; Brooklyn files the most requests of any borough.</p>
-      <p class="lead"><strong>Resolution time is predictable, to a point.</strong> A histogram gradient-boosting model lifts overall accuracy from a 59% majority baseline to ~66%, and recovers slow ("30+ day") cases that the baseline misses entirely — though mid-range buckets remain the hardest to call.</p>
-      <p class="lead"><strong>Equity matters.</strong> The fairness layer adjusts neighborhood comparisons for demographics so disparities aren't confounded by raw population differences.</p>
-    </section>
-
-    <section id="pipeline">
-      <div class="sec-head">How it's built</div>
-      <div class="flow">
-        <div class="flow-step"><div class="n">01 · INGEST</div><h4>Local storage</h4><p>Raw 311 records land in SQLite and yearly Parquet so analysis never reparses the source CSV.</p></div>
-        <div class="flow-step"><div class="n">02 · CLEAN</div><h4>Analytic base</h4><p>A standardized 2025–2026 Parquet with time features and preserved QA flags.</p></div>
-        <div class="flow-step"><div class="n">03 · ENRICH</div><h4>Text taxonomy</h4><p>Issue families, subtypes, and closure-language groupings layered onto each record.</p></div>
-        <div class="flow-step"><div class="n">04 · BUILD</div><h4>Reusable artifacts</h4><p>Geo, operations, fairness, and predictive builders write tidy Parquet scorecards.</p></div>
-        <div class="flow-step"><div class="n">05 · EXPLAIN</div><h4>Notebooks</h4><p>Six notebooks narrate each layer — the pages linked above.</p></div>
-        <div class="flow-step"><div class="n">06 · SHIP</div><h4>Dashboard</h4><p>A Streamlit app reads the artifacts into one interactive final product.</p></div>
+      <div class="panel">
+        <h3>Who files the most</h3>
+        <div class="hint">complaint volume by borough</div>
+        <div class="hbars" id="boroughs" style="margin-bottom:1.2rem"></div>
+        <h3 style="margin-top:1.6rem">How fast cases close</h3>
+        <div class="hint">share of requests by resolution time</div>
+        <div class="stack" id="buckets"></div>
+        <div class="stack-legend" id="bucketleg"></div>
       </div>
-      <div class="note"><strong>Stack:</strong> Python · pandas · NumPy · PyArrow · scikit-learn · GeoPandas / Shapely · Matplotlib · Streamlit &amp; pydeck. &nbsp;The interactive dashboard runs on Streamlit Community Cloud (it needs a live server, so it isn't part of this static site) — <a href="https://jahank-311analyzer.streamlit.app/" target="_blank" rel="noopener" style="color:var(--text)">open it here ↗</a>.</div>
-    </section>
+    </div>
   </div>
+</section>
 
-  <footer>
-    Built by <a href="https://jahankazimi078.github.io/">Jahan Kazimi</a> ·
-    <a href="https://github.com/jahankazimi078/311Analyzer" target="_blank" rel="noopener">Source on GitHub</a> ·
-    Data: NYC Open Data 311 Service Requests
-  </footer>
+<!-- ②  LANGUAGE -->
+<section id="language">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="bullet" style="background:var(--r2)">2</span>
+      <h2>The Language Layer</h2>
+      <a class="nb" href="notebooks/NLP.html">Open NLP notebook →</a>
+    </div>
+    <p class="sec-sub">Free-text complaints are mapped into <strong>issue families and modeled subtypes</strong>, and the city's closure notes are grouped into resolution-outcome categories. That taxonomy is reused by every layer downstream — geography, operations, equity and forecasting.</p>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Issue families</h3>
+        <div class="hint">what the complaint text is actually about</div>
+        <div class="hbars" id="families"></div>
+      </div>
+      <div class="panel">
+        <h3>How the city says "done"</h3>
+        <div class="hint">closure-language outcome groups</div>
+        <div class="hbars" id="outcomes"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ③  THE MAP -->
+<section id="map">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="bullet dark" style="background:var(--r3)">3</span>
+      <h2>The Map</h2>
+      <a class="nb" href="notebooks/Geo.html">Open Geo notebook →</a>
+    </div>
+    <p class="sec-sub">No basemap here — <strong>this is New York drawn entirely from its own complaints.</strong> Each cell is a grid square of the city, lit by how many 311 requests came out of it. Hover to explore; the shape of the five boroughs emerges on its own.</p>
+    <div class="grid32">
+      <div class="panel">
+        <h3>4.77M complaints, one skyline-free portrait</h3>
+        <div class="hint">brightness = complaint volume · hover for counts</div>
+        <div id="mapwrap"><canvas id="nycmap"></canvas></div>
+        <div class="maplegend"><span>quiet</span><span class="ramp"></span><span>loudest</span></div>
+      </div>
+      <div class="panel">
+        <h3>Loudest community boards</h3>
+        <div class="hint">ranked by total requests</div>
+        <table class="dep" id="boards"></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ④  OPERATIONS -->
+<section id="operations">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="bullet" style="background:var(--r4)">4</span>
+      <h2>Who Answers The Call</h2>
+      <a class="nb" href="notebooks/Operations.html">Open Operations notebook →</a>
+    </div>
+    <p class="sec-sub">A service-performance scorecard for the agencies behind the curtain — volume handled, median and 90th-percentile resolution time, and the complaint each agency spends the most time on. Styled like the departure board it deserves to be.</p>
+    <div class="panel">
+      <h3>Agency departure board</h3>
+      <div class="hint">top agencies by volume · median days to close a request</div>
+      <div style="overflow-x:auto"><table class="dep" id="agencies"></table></div>
+    </div>
+    <div class="grid2" style="margin-top:1.4rem">
+      <div class="panel">
+        <h3>Slowest big complaint types</h3>
+        <div class="hint">median days to resolve · top-volume types</div>
+        <div class="hbars" id="slowtypes"></div>
+      </div>
+      <div class="panel">
+        <h3>Reading the board</h3>
+        <div class="hint">three things worth noticing</div>
+        <div style="display:flex;flex-direction:column;gap:0.9rem;font-size:0.92rem;color:var(--dim)" id="opsnotes"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ⑤  EQUITY -->
+<section id="equity">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="bullet" style="background:var(--r5)">5</span>
+      <h2>Same City, Same Service?</h2>
+      <a class="nb" href="notebooks/Fairness.html">Open Fairness notebook →</a>
+    </div>
+    <p class="sec-sub">Every ZIP-code area (ZCTA) is joined to Census demographics, so neighborhood comparisons can be <strong>adjusted rather than confounded</strong> by population. Each dot below is a neighborhood; the question is whether income buys a different 311 experience.</p>
+    <div class="grid32">
+      <div class="panel">
+        <h3>Income vs. complaint burden</h3>
+        <div class="hint">each dot = one ZCTA · hover for details · colored by borough</div>
+        <svg class="chart" id="scatter" viewBox="0 0 800 430"></svg>
+        <div class="stack-legend" id="scatterleg" style="margin-top:0.7rem"></div>
+      </div>
+      <div class="panel">
+        <h3>By income quintile</h3>
+        <div class="hint">median complaints per 10k residents</div>
+        <div class="hbars" id="quintiles"></div>
+        <p style="font-size:0.88rem;color:var(--dim);margin-top:1.3rem" id="equitynote"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ⑥  FORECAST -->
+<section id="forecast">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="bullet" style="background:var(--r6)">6</span>
+      <h2>The Forecast</h2>
+      <a class="nb" href="notebooks/Predictive.html">Open Predictive notebook →</a>
+    </div>
+    <p class="sec-sub">Can you predict how long a request will take the moment it's filed? A multiclass model forecasts the <strong>resolution-time bucket</strong>, trained on 2025 and honestly tested on 2026 YTD — no time leakage.</p>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Model line-up</h3>
+        <div class="hint">overall accuracy on 2026 YTD test data</div>
+        <div class="hbars" id="models"></div>
+        <h3 style="margin-top:1.8rem">Where the model is sharp</h3>
+        <div class="hint">F1 score per resolution bucket · gradient boosting</div>
+        <div class="hbars" id="f1bars"></div>
+      </div>
+      <div class="panel">
+        <h3>Confusion matrix</h3>
+        <div class="hint">rows = actual · columns = predicted · % of each actual bucket</div>
+        <div class="cm" id="confusion"></div>
+        <p style="font-size:0.88rem;color:var(--dim);margin-top:1.1rem">The baseline can only ever say "&lt;1 day." Gradient boosting recovers the slow <b style="color:var(--ink)">30+ day</b> cases the baseline misses entirely — the mid-range buckets remain the hardest calls in the city.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINDINGS -->
+<section id="findings">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="bullet dark" style="background:#fff">★</span>
+      <h2>Three Headlines</h2>
+    </div>
+    <div class="findings">
+      <div class="finding"><div class="fn">FINDING 01 — VOLUME</div><p><strong>Complaints concentrate hard.</strong> Illegal Parking (~742K), Residential Noise (~560K) and Heat/Hot Water (~492K) alone account for over a third of all requests — and Brooklyn out-complains every other borough.</p></div>
+      <div class="finding"><div class="fn">FINDING 02 — PREDICTABILITY</div><p><strong>Resolution time is learnable, to a point.</strong> Gradient boosting lifts accuracy from a 59% majority baseline to ~66% and finds the month-long cases the baseline can't see — but 3–30 day cases still blur together.</p></div>
+      <div class="finding"><div class="fn">FINDING 03 — EQUITY</div><p><strong>Burden isn't evenly carried.</strong> Lower-income neighborhoods log systematically more complaints per resident, which is why the fairness layer adjusts comparisons for demographics before judging disparities.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- PIPELINE -->
+<section id="pipeline">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="bullet dark" style="background:var(--r3)">⚡</span>
+      <h2>How It's Built — Take The Line</h2>
+    </div>
+    <p class="sec-sub">One reproducible pipeline, six stops. Raw records ride from SQLite all the way to a deployed dashboard — every stage writes a reusable Parquet artifact, and this page is built from those same artifacts.</p>
+    <div class="lineWrap">
+      <div class="subline" id="subline"></div>
+    </div>
+    <p style="font-family:var(--mono);font-size:0.75rem;color:var(--faint);text-align:center">
+      Python · pandas · PyArrow · scikit-learn · GeoPandas · Streamlit — this page: zero frameworks, hand-rolled SVG/canvas, 100% static.
+    </p>
+  </div>
+</section>
+
+<!-- NOTEBOOKS -->
+<section id="notebooks">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="bullet" style="background:var(--r1)">≡</span>
+      <h2>The Full Analysis</h2>
+    </div>
+    <p class="sec-sub">Six narrative notebooks, exported to HTML and readable right here — no environment needed. Each one walks a layer of the pipeline with the full code and charts.</p>
+    <div class="nbgrid" id="nbgrid"></div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="footsign">Kazimi Ave <small>▸ E 311 ST</small></div>
+  <p>Built by <a href="https://jahankazimi078.github.io/">Jahan Kazimi</a> · <a href="https://github.com/jahankazimi078/311Analyzer" target="_blank" rel="noopener">source on GitHub</a> · data: NYC Open Data — 311 Service Requests</p>
+  <p>Static site — every chart on this page is rendered from pre-computed pipeline artifacts. No server, no tracking.</p>
+</footer>
+
+<div id="tip"></div>
+
+<script src="data.js"></script>
+<script>
+(function(){
+"use strict";
+var D = window.DATA;
+var fmt = function(n){ return Math.round(n).toLocaleString('en-US'); };
+var fmtK = function(n){ return n>=1e6 ? (n/1e6).toFixed(2)+'M' : n>=1e3 ? Math.round(n/1e3)+'K' : String(Math.round(n)); };
+var pct = function(x,d){ return (100*x).toFixed(d===undefined?1:d)+'%'; };
+var BORO = {'BROOKLYN':'#FCCC0A','QUEENS':'#B933AD','BRONX':'#EE352E','MANHATTAN':'#2E67D8','STATEN ISLAND':'#00933C'};
+var BUCKETS = ['<1 day','1-3 days','3-7 days','7-30 days','30+ days'];
+var BCOLORS = {'<1 day':'#FCCC0A','1-3 days':'#F5A623','3-7 days':'#FF6319','7-30 days':'#EE352E','30+ days':'#B933AD','Missing':'#4a5261'};
+
+/* tooltip */
+var tip = document.getElementById('tip');
+function showTip(html, ev){
+  tip.innerHTML = html; tip.style.display = 'block';
+  var x = ev.clientX + 14, y = ev.clientY + 14;
+  var r = tip.getBoundingClientRect();
+  if (x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y + r.height > window.innerHeight - 8) y = ev.clientY - r.height - 14;
+  tip.style.left = x+'px'; tip.style.top = y+'px';
+}
+function hideTip(){ tip.style.display = 'none'; }
+function bindTip(el, htmlFn){
+  el.addEventListener('mousemove', function(ev){ showTip(htmlFn(), ev); });
+  el.addEventListener('mouseleave', hideTip);
+}
+
+/* svg helper */
+var NS = 'http://www.w3.org/2000/svg';
+function E(tag, attrs, parent){
+  var e = document.createElementNS(NS, tag);
+  for (var k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+/* ── skyline ── */
+function skyline(){
+  var svg = document.getElementById('skyline');
+  var seed = 42; function rnd(){ seed = (seed*1664525+1013904223)>>>0; return seed/4294967296; }
+  var x = -10, H = 230;
+  var g = E('g', {}, svg);
+  while (x < 1230){
+    var w = 26 + rnd()*58;
+    var h = 40 + rnd()*110;
+    var tall = rnd() > 0.86;
+    if (tall) h += 60 + rnd()*50;
+    E('rect', {x:x, y:H-h, width:w, height:h, fill:'#10141d'}, g);
+    if (tall){
+      E('rect', {x:x+w/2-1.5, y:H-h-26, width:3, height:26, fill:'#10141d'}, g);
+    }
+    // lit windows
+    var cols = Math.max(2, Math.floor(w/9)), rows = Math.max(3, Math.floor(h/13));
+    for (var c=0;c<cols;c++) for (var r=0;r<rows;r++){
+      if (rnd() < 0.16){
+        E('rect', {x:x+4+c*(w-8)/cols, y:H-h+6+r*(h-10)/rows, width:2.4, height:3.6,
+          fill: rnd()<0.85 ? '#FCCC0A' : '#fff', opacity: 0.24+rnd()*0.5}, g);
+      }
+    }
+    x += w + 2 + rnd()*8;
+  }
+}
+
+/* ── ticker ── */
+function ticker(){
+  var t = document.getElementById('ticker');
+  var parts = D.sample_rows.map(function(r){
+    return '<span><span class="dim">'+r.created_date.replace('T',' ')+'</span>'+
+      ' · <span class="b">'+r.borough+'</span> · '+r.complaint_type.toUpperCase()+
+      ' — '+String(r.descriptor||'').toUpperCase()+
+      ' · '+String(r.status||'').toUpperCase()+'</span><span class="sep">◆◆◆</span>';
+  }).join('');
+  t.innerHTML = parts + parts; // duplicate for seamless loop
+}
+
+/* ── hero counter ── */
+function countUp(){
+  var el = document.getElementById('bignum');
+  var target = D.quality.complaints, t0 = null, dur = 2400;
+  function step(ts){
+    if (!t0) t0 = ts;
+    var p = Math.min(1, (ts-t0)/dur);
+    p = 1 - Math.pow(1-p, 3);
+    el.textContent = fmt(target*p);
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ── stats strip ── */
+function stats(){
+  var medH = D.quality.median_resolution_days*24;
+  var hgb = D.model_accuracy.filter(function(m){ return m.model_name==='hist_gradient_boosting' && m.feature_set==='post_routing'; })[0];
+  var items = [
+    {n:'<em>'+fmtK(D.quality.complaints)+'</em>', l:'requests · 2025–26 YTD'},
+    {n:'5', l:'boroughs · '+D.grid.length+' grid cells'},
+    {n:pct(D.quality.resolved_share)+'', l:'closed w/ valid date'},
+    {n:'<em>'+medH.toFixed(1)+'h</em>', l:'median time to close'},
+    {n:pct(hgb.metric_value,1), l:'forecast accuracy'}
+  ];
+  document.getElementById('stats').innerHTML = items.map(function(s){
+    return '<div class="stat"><div class="n">'+s.n+'</div><div class="l">'+s.l+'</div></div>';
+  }).join('');
+}
+
+/* ── generic horizontal bars ── */
+function hbars(elId, rows, opts){
+  opts = opts || {};
+  var el = document.getElementById(elId);
+  var max = Math.max.apply(null, rows.map(function(r){ return r.v; }));
+  el.innerHTML = rows.map(function(r,i){
+    return '<div class="hb"><div class="lbl" title="'+r.l+'">'+r.l+'</div>'+
+      '<div class="bar"><div class="fill" style="width:'+(100*r.v/max)+'%;background:'+(r.c||'var(--taxi)')+';animation-delay:'+(i*70)+'ms"></div></div>'+
+      '<div class="val">'+(r.d!==undefined?r.d:fmtK(r.v))+'</div></div>';
+  }).join('');
+}
+
+/* ── monthly line chart ── */
+function monthly(){
+  var svg = document.getElementById('monthly');
+  var W=800, H=300, L=64, R=20, T=18, B=40;
+  var y25 = D.monthly.filter(function(m){ return m.year_label==='2025'; });
+  var y26 = D.monthly.filter(function(m){ return m.year_label!=='2025'; });
+  var max = 380000;
+  var xs = function(i){ return L + i*(W-L-R)/11; };
+  var ys = function(v){ return T + (H-T-B)*(1 - v/max); };
+  for (var gv=100000; gv<=300000; gv+=100000){
+    E('line', {x1:L, x2:W-R, y1:ys(gv), y2:ys(gv), stroke:'#1c212c', 'stroke-width':1}, svg);
+    E('text', {x:L-8, y:ys(gv)+4, 'text-anchor':'end', 'font-size':11, fill:'#565d6b'}, svg).textContent = fmtK(gv);
+  }
+  var ML = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  ML.forEach(function(m,i){
+    E('text', {x:xs(i), y:H-14, 'text-anchor':'middle', 'font-size':10, fill:'#565d6b'}, svg).textContent = m;
+  });
+  function draw(series, color, dashLast){
+    var pts = series.map(function(m){
+      var mi = parseInt(m.month_label.slice(5),10)-1;
+      return [xs(mi), ys(m.complaints), m];
+    });
+    for (var i=1;i<pts.length;i++){
+      var last = (i===pts.length-1) && dashLast;
+      E('line', {x1:pts[i-1][0], y1:pts[i-1][1], x2:pts[i][0], y2:pts[i][1],
+        stroke:color, 'stroke-width':3, 'stroke-linecap':'round',
+        'stroke-dasharray': last?'2 7':'none', opacity: last?0.7:1}, svg);
+    }
+    pts.forEach(function(p){
+      var c = E('circle', {cx:p[0], cy:p[1], r:5.5, fill:color, stroke:'#0a0c10', 'stroke-width':2, style:'cursor:pointer'}, svg);
+      var m = p[2];
+      bindTip(c, function(){
+        var partial = m.month_label==='2026-04' ? ' <span style="color:#8b92a0">(partial — thru Apr 10)</span>' : '';
+        return '<span class="t">'+m.month_label+partial+'</span><br/>'+fmt(m.complaints)+' requests';
+      });
+    });
+  }
+  draw(y25, '#8b92a0', false);
+  draw(y26, '#FCCC0A', true);
+  var lg = E('g', {}, svg);
+  E('circle', {cx:W-150, cy:T+6, r:5, fill:'#8b92a0'}, lg);
+  E('text', {x:W-140, y:T+10, 'font-size':11, fill:'#8b92a0'}, lg).textContent = '2025';
+  E('circle', {cx:W-95, cy:T+6, r:5, fill:'#FCCC0A'}, lg);
+  E('text', {x:W-85, y:T+10, 'font-size':11, fill:'#FCCC0A'}, lg).textContent = '2026 YTD';
+}
+
+/* ── hourly bars ── */
+function hourly(){
+  var svg = document.getElementById('hourly');
+  var W=800, H=300, L=64, R=20, T=18, B=40;
+  var max = Math.max.apply(null, D.hourly.map(function(h){ return h.complaints; }));
+  var bw = (W-L-R)/24;
+  D.hourly.forEach(function(h){
+    var v = h.complaints, bh = (H-T-B)*v/max;
+    var t = v/max;
+    var col = t>0.8 ? '#FCCC0A' : t>0.5 ? '#c9a41a' : '#6b6032';
+    var r = E('rect', {x:L+h.created_hour*bw+2, y:H-B-bh, width:bw-4, height:bh, rx:2, fill:col, style:'cursor:pointer'}, svg);
+    bindTip(r, function(){
+      var hr = h.created_hour;
+      var lbl = (hr%12===0?12:hr%12) + (hr<12?' AM':' PM');
+      return '<span class="t">'+lbl+'</span><br/>'+fmt(v)+' requests';
+    });
+    if (h.created_hour%3===0){
+      E('text', {x:L+h.created_hour*bw+bw/2, y:H-14, 'text-anchor':'middle', 'font-size':10, fill:'#565d6b'}, svg)
+        .textContent = h.created_hour===0?'12A':h.created_hour===12?'12P':(h.created_hour%12)+(h.created_hour<12?'A':'P');
+    }
+  });
+  for (var gv=100000; gv<=Math.floor(max/100000)*100000; gv+=100000){
+    var y = H-B-(H-T-B)*gv/max;
+    E('text', {x:L-8, y:y+4, 'text-anchor':'end', 'font-size':11, fill:'#565d6b'}, svg).textContent = fmtK(gv);
+  }
+}
+
+/* ── weekday × hour heatmap ── */
+function heatmap(){
+  var el = document.getElementById('heatmap');
+  var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var lut = {};
+  var max = 0;
+  D.weekday_hour.forEach(function(r){ lut[r.created_weekday+'|'+r.created_hour] = r.complaints; if (r.complaints>max) max=r.complaints; });
+  var html = '<div class="rowl"></div>';
+  for (var h=0;h<24;h++) html += '<div class="coll">'+(h%3===0?(h===0?'12A':h===12?'12P':(h%12)+(h<12?'A':'P')):'')+'</div>';
+  DAYS.forEach(function(d){
+    html += '<div class="rowl">'+d.slice(0,3).toUpperCase()+'</div>';
+    for (var h=0;h<24;h++){
+      var v = lut[d+'|'+h]||0, t = v/max;
+      var a = Math.pow(t,1.35);
+      html += '<div class="cell" data-d="'+d+'" data-h="'+h+'" data-v="'+v+'" style="background:rgba(252,204,10,'+(0.03+a*0.97).toFixed(3)+')"></div>';
+    }
+  });
+  el.innerHTML = html;
+  el.addEventListener('mousemove', function(ev){
+    var c = ev.target;
+    if (c.classList.contains('cell')){
+      var h = +c.dataset.h;
+      var lbl = (h%12===0?12:h%12)+(h<12?' AM':' PM');
+      showTip('<span class="t">'+c.dataset.d+' · '+lbl+'</span><br/>'+fmt(+c.dataset.v)+' requests', ev);
+    } else hideTip();
+  });
+  el.addEventListener('mouseleave', hideTip);
+}
+
+/* ── top complaint types / boroughs / buckets ── */
+function edaBars(){
+  hbars('toptypes', D.top_complaint_types.map(function(r){
+    return {l:r.complaint_type, v:r.complaints};
+  }));
+  hbars('boroughs', D.borough_counts.map(function(r){
+    return {l:r.borough, v:r.complaints, c:BORO[r.borough]};
+  }));
+  var total = D.resolution_buckets.reduce(function(s,r){ return s+r.complaints; },0);
+  var order = BUCKETS.concat(['Missing']);
+  var rows = order.map(function(b){
+    var r = D.resolution_buckets.filter(function(x){ return x.resolution_bucket===b; })[0];
+    return r ? {b:b, v:r.complaints} : null;
+  }).filter(Boolean);
+  var stackEl = document.getElementById('buckets');
+  rows.forEach(function(r){
+    var d = document.createElement('div');
+    d.style.width = (100*r.v/total)+'%';
+    d.style.background = BCOLORS[r.b];
+    bindTip(d, function(){ return '<span class="t">'+r.b+'</span><br/>'+fmt(r.v)+' · '+pct(r.v/total); });
+    stackEl.appendChild(d);
+  });
+  document.getElementById('bucketleg').innerHTML = rows.map(function(r){
+    return '<span><i style="background:'+BCOLORS[r.b]+'"></i>'+r.b+' '+pct(r.v/total,0)+'</span>';
+  }).join('');
+}
+
+/* ── NLP bars ── */
+function nlp(){
+  hbars('families', D.issue_families.slice(0,10).map(function(r){
+    return {l:r.issue_family, v:r.complaints, c:'#FF6319'};
+  }));
+  var pretty = function(s){
+    return s.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
+  };
+  hbars('outcomes', D.outcome_groups.slice(0,10).map(function(r){
+    return {l:pretty(r.resolution_outcome_group), v:r.complaints, c:'#F5A623'};
+  }));
+}
+
+/* ── NYC complaint map ── */
+function nycMap(){
+  var canvas = document.getElementById('nycmap');
+  var grid = D.grid;
+  var lons = grid.map(function(g){return g.lon;}), lats = grid.map(function(g){return g.lat;});
+  var lonMin = Math.min.apply(null,lons), lonMax = Math.max.apply(null,lons);
+  var latMin = Math.min.apply(null,lats), latMax = Math.max.apply(null,lats);
+  // cell step: min positive diff among sorted unique lons
+  var ul = Array.from(new Set(lons)).sort(function(a,b){return a-b;});
+  var step = Infinity;
+  for (var i=1;i<ul.length;i++){ var d = ul[i]-ul[i-1]; if (d>1e-6 && d<step) step=d; }
+  if (!isFinite(step)) step = 0.01;
+  var pad = step;
+  lonMin-=pad; lonMax+=pad; latMin-=pad; latMax+=pad;
+  var kx = Math.cos(40.7*Math.PI/180); // shrink lon distances
+  var aspect = ((latMax-latMin)) / ((lonMax-lonMin)*kx);
+  var maxC = Math.max.apply(null, grid.map(function(g){return g.total_complaints;}));
+  var lmax = Math.log(maxC+1);
+  var RAMP = [[0,[22,28,40]],[0.42,[120,66,26]],[0.72,[230,140,20]],[1,[252,224,80]]];
+  function ramp(t){
+    for (var i=1;i<RAMP.length;i++){
+      if (t<=RAMP[i][0]){
+        var a=RAMP[i-1], b=RAMP[i], u=(t-a[0])/(b[0]-a[0]);
+        return 'rgb('+Math.round(a[1][0]+(b[1][0]-a[1][0])*u)+','+Math.round(a[1][1]+(b[1][1]-a[1][1])*u)+','+Math.round(a[1][2]+(b[1][2]-a[1][2])*u)+')';
+      }
+    }
+    return 'rgb(252,224,80)';
+  }
+  var cells = [];
+  function draw(){
+    var cssW = canvas.parentElement.clientWidth;
+    if (cssW < 10) return;
+    var cssH = Math.round(cssW*aspect);
+    var dpr = window.devicePixelRatio||1;
+    canvas.width = cssW*dpr; canvas.height = cssH*dpr;
+    canvas.style.height = cssH+'px';
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr,dpr);
+    ctx.fillStyle = '#07090d';
+    ctx.fillRect(0,0,cssW,cssH);
+    var px = function(lon){ return (lon-lonMin)/(lonMax-lonMin)*cssW; };
+    var py = function(lat){ return (1-(lat-latMin)/(latMax-latMin))*cssH; };
+    var cw = step/(lonMax-lonMin)*cssW;
+    var ch = step/(latMax-latMin)*cssH;
+    cells = [];
+    // dim pass then bright pass so glow sits on top
+    var sorted = grid.slice().sort(function(a,b){ return a.total_complaints-b.total_complaints; });
+    sorted.forEach(function(g){
+      var t = Math.log(g.total_complaints+1)/lmax;
+      var x = px(g.lon)-cw/2, y = py(g.lat)-ch/2;
+      if (t>0.88){ ctx.shadowColor = 'rgba(252,204,10,0.8)'; ctx.shadowBlur = 10; }
+      else ctx.shadowBlur = 0;
+      ctx.fillStyle = ramp(t);
+      ctx.globalAlpha = 0.35+0.65*t;
+      ctx.fillRect(x+0.5, y+0.5, Math.max(1.5,cw-1), Math.max(1.5,ch-1));
+      cells.push({x:x, y:y, w:cw, h:ch, g:g});
+    });
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    // borough labels
+    ctx.font = '600 11px IBM Plex Mono, monospace';
+    ctx.fillStyle = 'rgba(242,240,233,0.6)';
+    var labels = [['MANHATTAN',-73.968,40.783],['BROOKLYN',-73.945,40.645],['QUEENS',-73.79,40.73],['THE BRONX',-73.87,40.865],['STATEN ISLAND',-74.16,40.565]];
+    labels.forEach(function(L){
+      ctx.save();
+      ctx.shadowColor = '#000'; ctx.shadowBlur = 6;
+      ctx.fillText(L[0], px(L[1]), py(L[2]));
+      ctx.restore();
+    });
+  }
+  draw();
+  var rto; window.addEventListener('resize', function(){ clearTimeout(rto); rto = setTimeout(draw, 150); });
+  canvas.addEventListener('mousemove', function(ev){
+    var r = canvas.getBoundingClientRect();
+    var mx = ev.clientX-r.left, my = ev.clientY-r.top;
+    var hit = null;
+    for (var i=cells.length-1;i>=0;i--){
+      var c = cells[i];
+      if (mx>=c.x && mx<=c.x+c.w && my>=c.y && my<=c.y+c.h){ hit = c.g; break; }
+    }
+    if (hit){
+      var extra = hit.hotspot_month_share>0.5 ? '<br/><span style="color:#EE352E">persistent hotspot ('+pct(hit.hotspot_month_share,0)+' of months)</span>' : '';
+      showTip('<span class="t">'+fmt(hit.total_complaints)+' complaints</span><br/>'+pct(hit.unresolved_share||0)+' unresolved'+extra, ev);
+    } else hideTip();
+  });
+  canvas.addEventListener('mouseleave', hideTip);
+}
+
+/* ── community boards ── */
+function boards(){
+  var max = Math.max.apply(null, D.top_boards.map(function(b){return b.complaints;}));
+  var html = '<tr><th>#</th><th>Board</th><th>Requests</th><th></th></tr>';
+  D.top_boards.forEach(function(b,i){
+    var bc = BORO[b.community_board_borough]||'#888';
+    html += '<tr><td class="k">'+(i+1)+'</td>'+
+      '<td class="k">'+b.community_board+'<br/><span class="chip" style="background:'+bc+'">'+b.community_board_borough+'</span></td>'+
+      '<td class="k">'+fmt(b.complaints)+'<br/><span class="mini" style="width:'+(90*b.complaints/max)+'px"></span></td>'+
+      '<td style="font-size:0.68rem">'+b.top_complaint_type+'</td></tr>';
+  });
+  document.getElementById('boards').innerHTML = html;
+}
+
+/* ── agency departure board ── */
+function agencies(){
+  var top = D.agency_metrics.slice(0,10);
+  var max = Math.max.apply(null, top.map(function(a){return a.complaints;}));
+  var html = '<tr><th>Agency</th><th></th><th>Requests</th><th>Median close</th><th>P90</th><th>Resolved</th><th>Top complaint</th></tr>';
+  top.forEach(function(a){
+    var med = a.median_resolution_days;
+    var medTxt = med==null ? '—' : med<1 ? (med*24).toFixed(1)+' h' : med.toFixed(1)+' d';
+    var p90 = a.p90_resolution_days;
+    var p90Txt = p90==null ? '—' : p90<1 ? (p90*24).toFixed(1)+' h' : p90.toFixed(1)+' d';
+    html += '<tr><td><span class="code">'+a.agency+'</span></td>'+
+      '<td style="font-size:0.7rem;max-width:220px">'+a.agency_name+'</td>'+
+      '<td class="k">'+fmt(a.complaints)+'<br/><span class="mini" style="width:'+(110*a.complaints/max)+'px"></span></td>'+
+      '<td class="k">'+medTxt+'</td><td>'+p90Txt+'</td>'+
+      '<td class="k">'+(a.resolved_share==null?'—':pct(a.resolved_share,0))+'</td>'+
+      '<td style="font-size:0.68rem">'+(a.top_complaint_type||'')+'</td></tr>';
+  });
+  document.getElementById('agencies').innerHTML = html;
+
+  var slow = D.complaint_type_metrics.slice()
+    .filter(function(c){ return c.median_resolution_days!=null; })
+    .sort(function(a,b){ return b.median_resolution_days-a.median_resolution_days; })
+    .slice(0,8);
+  hbars('slowtypes', slow.map(function(c){
+    return {l:c.complaint_type, v:c.median_resolution_days, c:'#00933C', d:c.median_resolution_days.toFixed(1)+' d'};
+  }));
+
+  var fastest = D.agency_metrics.slice().filter(function(a){return a.median_resolution_days!=null && a.complaints>100000;})
+    .sort(function(a,b){return a.median_resolution_days-b.median_resolution_days;})[0];
+  var nypd = D.agency_metrics.filter(function(a){return a.agency==='NYPD';})[0];
+  var notes = [];
+  if (nypd) notes.push('<span><b style="color:var(--ink)">NYPD handles the flood.</b> '+fmt(nypd.complaints)+' requests — mostly '+ (nypd.top_complaint_type||'noise and parking') +' — with a median close of '+(nypd.median_resolution_days*24).toFixed(1)+' hours.</span>');
+  if (fastest) notes.push('<span><b style="color:var(--ink)">Fastest big responder:</b> '+fastest.agency+' closes a typical case in '+(fastest.median_resolution_days*24).toFixed(1)+' hours.</span>');
+  notes.push('<span><b style="color:var(--ink)">The long tail is structural.</b> Infrastructure-heavy complaint types run to medians of days or weeks — the P90 column is where agency workloads really diverge.</span>');
+  document.getElementById('opsnotes').innerHTML = notes.join('');
+}
+
+/* ── equity scatter ── */
+function equity(){
+  var svg = document.getElementById('scatter');
+  var W=800, H=430, L=70, R=20, T=16, B=46;
+  var YMAX = 13000, XMIN=20000, XMAX=260000;
+  var clipped = D.zcta.filter(function(z){ return z.complaints_per_10k > YMAX; }).length;
+  var xs = function(v){ return L + (v-XMIN)/(XMAX-XMIN)*(W-L-R); };
+  var ys = function(v){ return T + (H-T-B)*(1 - Math.min(v,YMAX)/YMAX); };
+  for (var gy=0; gy<=12000; gy+=3000){
+    E('line',{x1:L,x2:W-R,y1:ys(gy),y2:ys(gy),stroke:'#1c212c'},svg);
+    E('text',{x:L-8,y:ys(gy)+4,'text-anchor':'end','font-size':11,fill:'#565d6b'},svg).textContent = fmtK(gy);
+  }
+  for (var gx=50000; gx<=250000; gx+=50000){
+    E('text',{x:xs(gx),y:H-18,'text-anchor':'middle','font-size':11,fill:'#565d6b'},svg).textContent = '$'+fmtK(gx);
+  }
+  E('text',{x:(L+W-R)/2,y:H-2,'text-anchor':'middle','font-size':11,fill:'#8b92a0'},svg).textContent = 'median household income';
+  E('text',{x:14,y:(T+H-B)/2,'font-size':11,fill:'#8b92a0',transform:'rotate(-90 14 '+((T+H-B)/2)+')','text-anchor':'middle'},svg).textContent = 'complaints per 10k residents';
+  D.zcta.forEach(function(z){
+    var c = E('circle',{cx:xs(Math.min(z.median_household_income,XMAX)), cy:ys(z.complaints_per_10k),
+      r:4, fill:BORO[z.top_borough]||'#888', opacity:0.78, style:'cursor:pointer'},svg);
+    bindTip(c, function(){
+      return '<span class="t">ZCTA '+z.zcta+' · '+z.top_borough+'</span><br/>'+
+        '$'+fmt(z.median_household_income)+' median income<br/>'+
+        fmt(z.complaints_per_10k)+' complaints / 10k'+(z.complaints_per_10k>YMAX?' (above axis)':'')+'<br/>'+
+        'median close: '+(z.median_resolution_days*24).toFixed(1)+' h';
+    });
+  });
+  document.getElementById('scatterleg').innerHTML =
+    Object.keys(BORO).map(function(b){
+      return '<span><i style="background:'+BORO[b]+'"></i>'+b+'</span>';
+    }).join('') + (clipped? '<span style="color:var(--faint)">'+clipped+' outlier ZCTAs clipped at 13K</span>':'');
+
+  var ORDER = ['Q1 lowest income','Q2','Q3','Q4','Q5 highest income'];
+  var rows = ORDER.map(function(q){
+    var r = D.income_quintiles.filter(function(x){ return x.income_quintile===q; })[0];
+    return r ? {l:q.replace(' income',''), v:r.complaints_per_10k, c:'#2E67D8', d:fmt(r.complaints_per_10k)} : null;
+  }).filter(Boolean);
+  hbars('quintiles', rows);
+  var q1 = rows[0].v, q5 = rows[rows.length-1].v;
+  document.getElementById('equitynote').innerHTML =
+    'The median ZCTA in the <b style="color:var(--ink)">lowest-income quintile</b> logs <b style="color:var(--ink)">'+
+    (q1/q5).toFixed(1)+'×</b> the complaints per resident of the highest quintile — the raw gap the fairness models then adjust for demographics and complaint mix.';
+}
+
+/* ── forecast ── */
+function forecast(){
+  var NAMES = {most_frequent_baseline:'Majority baseline', multinomial_logistic:'Logit', hist_gradient_boosting:'Boosting'};
+  var FS = {shared:'', intake_only:' · intake', post_routing:' · routed'};
+  var rows = D.model_accuracy.slice().sort(function(a,b){ return a.metric_value-b.metric_value; })
+    .map(function(m){
+      var best = m.model_name==='hist_gradient_boosting' && m.feature_set==='post_routing';
+      return {l:NAMES[m.model_name]+FS[m.feature_set], v:m.metric_value,
+        c: m.model_name==='most_frequent_baseline' ? '#4a5261' : best ? '#FCCC0A' : '#7d5fb0',
+        d: pct(m.metric_value,1)};
+    });
+  hbars('models', rows);
+  var f1rows = BUCKETS.map(function(b){
+    var r = D.model_f1_per_class.filter(function(x){ return x.target_class===b; })[0];
+    return r ? {l:b, v:r.metric_value, c:BCOLORS[b], d:r.metric_value.toFixed(2)} : null;
+  }).filter(Boolean);
+  hbars('f1bars', f1rows);
+
+  // confusion matrix
+  var cmEl = document.getElementById('confusion');
+  cmEl.style.gridTemplateColumns = '84px repeat(5,1fr)';
+  var lut = {};
+  D.confusion.forEach(function(r){ lut[r.actual_resolution_bucket+'|'+r.predicted_resolution_bucket] = r; });
+  var html = '<div class="h"></div>';
+  BUCKETS.forEach(function(b){ html += '<div class="h">'+b+'</div>'; });
+  BUCKETS.forEach(function(a){
+    html += '<div class="rl">'+a+'</div>';
+    BUCKETS.forEach(function(p){
+      var r = lut[a+'|'+p];
+      var share = r ? r.actual_bucket_share : 0;
+      var diag = a===p;
+      var bg = diag ? 'rgba(252,204,10,'+(0.08+share*0.85).toFixed(3)+')'
+                    : 'rgba(238,53,46,'+(0.04+share*0.8).toFixed(3)+')';
+      var fg = share>0.5 && diag ? '#000' : 'var(--ink)';
+      html += '<div class="c'+(diag?' diag':'')+'" data-a="'+a+'" data-p="'+p+'" data-n="'+(r?r.complaints:0)+'" data-s="'+share+'" style="background:'+bg+';color:'+fg+'">'+(share>=0.005?Math.round(share*100)+'%':'·')+'</div>';
+    });
+  });
+  cmEl.innerHTML = html;
+  cmEl.addEventListener('mousemove', function(ev){
+    var c = ev.target;
+    if (c.classList.contains('c')){
+      showTip('<span class="t">actual '+c.dataset.a+' → predicted '+c.dataset.p+'</span><br/>'+
+        fmt(+c.dataset.n)+' cases · '+pct(+c.dataset.s), ev);
+    } else hideTip();
+  });
+  cmEl.addEventListener('mouseleave', hideTip);
+}
+
+/* ── pipeline subway line ── */
+function pipeline(){
+  var stops = [
+    {nm:'Ingest', ds:'raw CSV → SQLite + yearly Parquet'},
+    {nm:'Clean', ds:'2025–26 analytic base · QA flags kept'},
+    {nm:'Enrich', ds:'NLP taxonomy · issue families + outcomes'},
+    {nm:'Build', ds:'geo / ops / fairness / predictive artifacts'},
+    {nm:'Explain', ds:'six narrative notebooks'},
+    {nm:'Ship', ds:'Streamlit app + this static site'}
+  ];
+  document.getElementById('subline').innerHTML = stops.map(function(s,i){
+    var pos = i%2===0 ? 'up' : 'dn';
+    return '<div class="stationCol"><div class="'+pos+'"><div class="nm">'+s.nm+'</div><div class="ds">'+s.ds+'</div></div><div class="station"></div></div>';
+  }).join('');
+}
+
+/* ── notebook cards ── */
+function notebooks(){
+  var nbs = [
+    {n:1,c:'var(--r1)',t:'Exploratory Analysis',f:'EDA.html',d:'City-wide volume, seasonal & hourly rhythm, and data-quality checks across 4.77M cleaned rows.'},
+    {n:2,c:'var(--r2)',t:'Text & NLP',f:'NLP.html',d:'Complaint text → issue families & subtypes; closure notes → resolution-outcome groups.'},
+    {n:3,c:'var(--r3)',t:'Geospatial',f:'Geo.html',d:'Burden mapping, hotspot persistence and community-board views at ZCTA and grid resolution.'},
+    {n:4,c:'var(--r4)',t:'Operations',f:'Operations.html',d:'Agency and complaint-type scorecards with monthly trends in response and closure behavior.'},
+    {n:5,c:'var(--r5)',t:'Neighborhood Equity',f:'Fairness.html',d:'Demographic-adjusted disparity analysis with community-board sensitivity checks.'},
+    {n:6,c:'var(--r6)',t:'Predictive Modeling',f:'Predictive.html',d:'Multiclass resolution-bucket forecasting — trained on 2025, tested honestly on 2026 YTD.'}
+  ];
+  document.getElementById('nbgrid').innerHTML = nbs.map(function(n){
+    var dark = n.n===3 ? ' dark' : '';
+    return '<a class="nbcard" style="--cardc:'+n.c+'" href="notebooks/'+n.f+'">'+
+      '<div class="rowt"><span class="bullet'+dark+'" style="background:'+n.c+'">'+n.n+'</span><h3>'+n.t+'</h3></div>'+
+      '<p>'+n.d+'</p><div class="go">OPEN NOTEBOOK →</div></a>';
+  }).join('');
+}
+
+/* run everything, isolated */
+[skyline,ticker,countUp,stats,monthly,hourly,heatmap,edaBars,nlp,nycMap,boards,agencies,equity,forecast,pipeline,notebooks]
+  .forEach(function(f){ try{ f(); } catch(e){ console.error(f.name, e); } });
+})();
+</script>
 </body>
 </html>
