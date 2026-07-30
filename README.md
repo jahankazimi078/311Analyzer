@@ -4,7 +4,7 @@
 
 The repo turns raw 311 records into a cleaned analytic dataset, enriches it with complaint-text taxonomy and neighborhood context, builds reusable geospatial and operations scorecards, evaluates neighborhood equity patterns, and finishes with a presentable interactive dashboard.
 
-[The Streamlit Community Cloud dashboard can be accessed here](https://jahank-311analyzer.streamlit.app/)
+[The interactive showcase site can be accessed here](https://jahankazimi078.github.io/311Analyzer/)
 
 ## What The Project Does
 

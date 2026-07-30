@@ -390,8 +390,7 @@ footer a:hover{color:var(--taxi);border-color:var(--taxi)}
     <span class="bignum" id="bignum">0</span>
     <span class="bignum-lbl">311 service requests analyzed</span>
     <div class="cta">
-      <a class="btn primary" href="https://jahank-311analyzer.streamlit.app/" target="_blank" rel="noopener">Live Dashboard ↗</a>
-      <a class="btn" href="#notebooks">Read the Analysis</a>
+      <a class="btn primary" href="#notebooks">Read the Analysis</a>
       <a class="btn" href="https://github.com/jahankazimi078/311Analyzer" target="_blank" rel="noopener">Source Code ↗</a>
     </div>
   </div>
@@ -602,12 +601,12 @@ footer a:hover{color:var(--taxi);border-color:var(--taxi)}
       <span class="bullet dark" style="background:var(--r3)">⚡</span>
       <h2>How It's Built — Take The Line</h2>
     </div>
-    <p class="sec-sub">One reproducible pipeline, six stops. Raw records ride from SQLite all the way to a deployed dashboard — every stage writes a reusable Parquet artifact, and this page is built from those same artifacts.</p>
+    <p class="sec-sub">One reproducible pipeline, six stops. Raw records ride from SQLite all the way to this page — every stage writes a reusable Parquet artifact, and this page is built from those same artifacts.</p>
     <div class="lineWrap">
       <div class="subline" id="subline"></div>
     </div>
     <p style="font-family:var(--mono);font-size:0.75rem;color:var(--faint);text-align:center">
-      Python · pandas · PyArrow · scikit-learn · GeoPandas · Streamlit — this page: zero frameworks, hand-rolled SVG/canvas, 100% static.
+      Python · pandas · PyArrow · scikit-learn · GeoPandas — this page: zero frameworks, hand-rolled SVG/canvas, 100% static.
     </p>
   </div>
 </section>
@@ -1131,7 +1130,7 @@ function pipeline(){
     {nm:'Enrich', ds:'NLP taxonomy · issue families + outcomes'},
     {nm:'Build', ds:'geo / ops / fairness / predictive artifacts'},
     {nm:'Explain', ds:'six narrative notebooks'},
-    {nm:'Ship', ds:'Streamlit app + this static site'}
+    {nm:'Ship', ds:'this static site, built from those artifacts'}
   ];
   document.getElementById('subline').innerHTML = stops.map(function(s,i){
     var pos = i%2===0 ? 'up' : 'dn';
